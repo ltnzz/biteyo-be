@@ -30,7 +30,7 @@ export const signUp = async (req, res) => {
 
         if (existingUser.length > 0) {
             return res.status(400).json({
-                message: 'Email or username already exists',
+                message: 'User already exists',
             });
         }
 
@@ -80,7 +80,7 @@ export const signIn = async (req, res) => {
 
         if (existingUser.length === 0) {
             return res.status(400).json({
-                message: 'Email not found',
+                message: 'Invalid credentials',
             });
         }
 
@@ -144,23 +144,34 @@ export const forgotPassword = async (req, res) => {
             .where(eq(users.email, email));
 
         if (existingUser.length === 0) {
-            return res.status(404).json({
-                message: 'Email not found',
+            return res.status(200).json({
+                message: 'If the email exists, a reset link has been sent.',
             });
         }
 
         const user = existingUser[0];
 
-        const resetToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-            expiresIn: '15m',
-        });
+        const resetToken = jwt.sign(
+            { id: user.id, type: 'reset_password' },
+            process.env.JWT_SECRET,
+            {
+                expiresIn: '15m',
+            }
+        );
 
         const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
 
-        await sendEmail(user.email, 'Reset Password BiteYo', resetPasswordTemplate(resetLink));
+        await sendEmail(
+            user.email,
+            'Reset Password BiteYo',
+            resetPasswordTemplate(resetLink)
+        );
+
+        const [name, domain] = user.email.split('@');
+        const maskedEmail = name.slice(0, 2) + '***@' + domain;
 
         return res.status(200).json({
-            message: 'Reset link sent',
+            message: `Reset link sent to ${maskedEmail}. Please check your inbox.`,
         });
     } catch (error) {
         console.log('Error in forgotPassword controller', error);
@@ -184,7 +195,24 @@ export const resetPassword = async (req, res) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+        if (decoded.type !== 'reset_password') {
+            return res.status(400).json({
+                message: 'Invalid token',
+            });
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
+
+        const user = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, decoded.id));
+
+        if (!user.length) {
+            return res.status(404).json({
+                message: 'User not found',
+            });
+        }
 
         await db
             .update(users)
@@ -219,6 +247,11 @@ export const getMe = async (req, res) => {
         }
 
         const user = existingUser[0];
+        if (!user) {
+            return res.status(404).json({
+                message: 'User not found',
+            });
+        }
 
         const { password, ...safeUser } = user;
 

@@ -1,10 +1,6 @@
 import nodemailer from 'nodemailer';
 
-export const sendEmail = async (
-    to,
-    subject,
-    html
-) => {
+export const sendEmail = async (to, subject, html) => {
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
@@ -14,7 +10,7 @@ export const sendEmail = async (
     });
 
     await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+        from: `"Biteyo (No Reply)" <${process.env.EMAIL_USER}>`,
         to,
         subject,
         html,

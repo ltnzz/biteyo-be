@@ -37,6 +37,10 @@ export const resetPasswordTemplate = (resetLink) => {
         (c) ${new Date().getFullYear()} BiteYo App. All rights reserved.
       </p>
 
+      <p style="margin-bottom:5px;">
+        Biteyo, TB Simatupang, Jakarta Selatan, Indonesia
+      </p>
+
       <p style="margin:0;">
         This email was sent automatically, please do not reply.
       </p>
