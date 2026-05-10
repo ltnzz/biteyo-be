@@ -14,7 +14,13 @@ const generateToken = (id) => {
 
 export const signUp = async (req, res) => {
     try {
-        const { username, email, password } = req.body;
+        const { username, email, password, confirm_password } = req.body;
+
+        if (password !== confirm_password) {
+            return res.status(400).json({
+                message: 'Passwords do not match',
+            });
+        }
 
         const existingUser = await db
             .select()
@@ -42,7 +48,7 @@ export const signUp = async (req, res) => {
 
         res.cookie('token', token, {
             httpOnly: true,
-            secure: false,
+            secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
@@ -54,8 +60,8 @@ export const signUp = async (req, res) => {
             user: safeUser,
         });
     } catch (error) {
-        console.log(error);
-        console.log('Error in signUp controller');
+        console.log('Error in signUp controller', error);
+
         return res.status(500).json({
             message: 'Internal server error',
         });
@@ -77,6 +83,8 @@ export const signIn = async (req, res) => {
             });
         }
 
+        const user = existingUser[0];
+
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
@@ -89,7 +97,7 @@ export const signIn = async (req, res) => {
 
         res.cookie('token', token, {
             httpOnly: true,
-            secure: false,
+            secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
@@ -101,7 +109,7 @@ export const signIn = async (req, res) => {
             user: safeUser,
         });
     } catch (error) {
-        console.log(error);
+        console.log('Error in signIn controller', error);
 
         return res.status(500).json({
             message: 'Internal server error',
@@ -110,11 +118,19 @@ export const signIn = async (req, res) => {
 };
 
 export const logout = async (_req, res) => {
-    res.clearCookie('token');
+    try {
+        res.clearCookie('token');
 
-    return res.status(200).json({
-        message: 'Logout success',
-    });
+        return res.status(200).json({
+            message: 'Logout success',
+        });
+    } catch (error) {
+        console.log('Error in logout controller', error);
+
+        return res.status(500).json({
+            message: 'Internal server error',
+        });
+    }
 };
 
 export const forgotPassword = async (req, res) => {
@@ -132,6 +148,8 @@ export const forgotPassword = async (req, res) => {
             });
         }
 
+        const user = existingUser[0];
+
         const resetToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
             expiresIn: '15m',
         });
@@ -143,7 +161,8 @@ export const forgotPassword = async (req, res) => {
             'Reset Password',
             `
             <h2>Reset Password</h2>
-            <a href="${resetLink}">Reset Here</a>
+            <p>Click the link below to reset your password:</p>
+            <a href="${resetLink}">${resetLink}</a>
             `
         );
 
@@ -151,7 +170,7 @@ export const forgotPassword = async (req, res) => {
             message: 'Reset link sent',
         });
     } catch (error) {
-        console.log(error);
+        console.log('Error in forgotPassword controller', error);
 
         return res.status(500).json({
             message: 'Internal server error',
@@ -179,7 +198,7 @@ export const resetPassword = async (req, res) => {
             message: 'Password reset success',
         });
     } catch (error) {
-        console.log(error);
+        console.log('Error in resetPassword controller', error);
 
         return res.status(400).json({
             message: 'Invalid or expired token',
@@ -192,7 +211,7 @@ export const getMe = async (req, res) => {
         const existingUser = await db
             .select()
             .from(users)
-            .where(eq(users.email, email));
+            .where(eq(users.id, req.user.id));
 
         if (existingUser.length === 0) {
             return res.status(404).json({
@@ -200,13 +219,15 @@ export const getMe = async (req, res) => {
             });
         }
 
+        const user = existingUser[0];
+
         const { password, ...safeUser } = user;
 
         return res.status(200).json({
             user: safeUser,
         });
     } catch (error) {
-        console.log(error);
+        console.log('Error in getMe controller', error);
 
         return res.status(500).json({
             message: 'Internal server error',
