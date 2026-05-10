@@ -3,6 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import 'dotenv/config';
 import authRoutes from './routes/auth.route.js';
+import mapsRoutes from './routes/maps.route.js';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/maps', mapsRoutes);
 
 const PORT = process.env.PORT || 4000;
 
