@@ -85,6 +85,7 @@ export const updateBite = async (req, res) => {
                 review,
                 rating,
                 category,
+                updatedAt: new Date(),
             })
             .where(eq(bites.id, id))
             .returning();
