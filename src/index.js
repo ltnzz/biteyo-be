@@ -1,9 +1,11 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import 'dotenv/config';
 import authRoutes from './routes/auth.route.js';
 import mapsRoutes from './routes/maps.route.js';
+import feedRoutes from './routes/feed.route.js';
 
 const app = express();
 
@@ -25,6 +27,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/maps', mapsRoutes);
+app.use('/api/feed', feedRoutes);
 
 const PORT = process.env.PORT || 4000;
 

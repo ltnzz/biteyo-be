@@ -34,6 +34,7 @@ export const users = pgTable('users', {
     bio: varchar('bio', { length: 255 }),
     avatarUrl: text('avatar_url'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 export const follows = pgTable('follows', {
@@ -57,17 +58,18 @@ export const bites = pgTable('bites', {
         .notNull()
         .references(() => users.id, { onDelete: 'cascade' }),
     foodName: varchar('food_name', { length: 64 }).notNull(),
-    locationName: varchar('location_name', { length: 255 }),
+    locationName: varchar('location_name', { length: 255 }).notNull(),
     locationAddress: text('location_address'),
     latitude: decimal('latitude', { precision: 10, scale: 8 }),
     longitude: decimal('longitude', { precision: 11, scale: 8 }),
     placeId: varchar('place_id', { length: 255 }),
-    review: varchar('review', { length: 255 }),
+    review: text('review'),
     rating: integer('rating').notNull(),
-    photoUrl: text('photo_url'),
+    photoUrl: text('photo_url').notNull(),
     category: categoryEnum('category').notNull(),
     isTrending: boolean('is_trending').default(false),
     createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 export const likes = pgTable('likes', {
