@@ -1,10 +1,11 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 
 import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { sendEmail } from '../utils/email.js';
+import { resetPasswordTemplate } from '../templates/auth.email.template.js';
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -25,11 +26,11 @@ export const signUp = async (req, res) => {
         const existingUser = await db
             .select()
             .from(users)
-            .where(eq(users.email, email));
+            .where(or(eq(users.email, email), eq(users.username, username)));
 
         if (existingUser.length > 0) {
             return res.status(400).json({
-                message: 'Email already exists',
+                message: 'Email or username already exists',
             });
         }
 
@@ -79,7 +80,7 @@ export const signIn = async (req, res) => {
 
         if (existingUser.length === 0) {
             return res.status(400).json({
-                message: 'Invalid credentials',
+                message: 'Email not found',
             });
         }
 
@@ -144,7 +145,7 @@ export const forgotPassword = async (req, res) => {
 
         if (existingUser.length === 0) {
             return res.status(404).json({
-                message: 'User not found',
+                message: 'Email not found',
             });
         }
 
@@ -156,15 +157,7 @@ export const forgotPassword = async (req, res) => {
 
         const resetLink = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
 
-        await sendEmail(
-            email,
-            'Reset Password',
-            `
-            <h2>Reset Password</h2>
-            <p>Click the link below to reset your password:</p>
-            <a href="${resetLink}">${resetLink}</a>
-            `
-        );
+        await sendEmail(user.email, 'Reset Password BiteYo', resetPasswordTemplate(resetLink));
 
         return res.status(200).json({
             message: 'Reset link sent',
@@ -181,7 +174,13 @@ export const forgotPassword = async (req, res) => {
 export const resetPassword = async (req, res) => {
     try {
         const { token } = req.params;
-        const { password } = req.body;
+        const { password, confirm_password } = req.body;
+
+        if (password !== confirm_password) {
+            return res.status(400).json({
+                message: 'Passwords do not match',
+            });
+        }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
