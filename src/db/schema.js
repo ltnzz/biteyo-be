@@ -6,6 +6,7 @@ import {
     integer,
     timestamp,
     boolean,
+    decimal,
     pgEnum,
 } from 'drizzle-orm/pg-core';
 
@@ -31,7 +32,6 @@ export const users = pgTable('users', {
     email: varchar('email', { length: 64 }).notNull().unique(),
     password: varchar('password', { length: 64 }).notNull(),
     bio: varchar('bio', { length: 255 }),
-    location: text('location'),
     avatarUrl: text('avatar_url'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -55,11 +55,13 @@ export const bites = pgTable('bites', {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')
         .notNull()
-        .references(() => users.id, {
-            onDelete: 'cascade',
-        }),
+        .references(() => users.id, { onDelete: 'cascade' }),
     foodName: varchar('food_name', { length: 64 }).notNull(),
-    location: text('location').notNull(),
+    locationName: varchar('location_name', { length: 255 }),
+    locationAddress: text('location_address'),
+    latitude: decimal('latitude', { precision: 10, scale: 8 }),
+    longitude: decimal('longitude', { precision: 11, scale: 8 }),
+    placeId: varchar('place_id', { length: 255 }),
     review: varchar('review', { length: 255 }),
     rating: integer('rating').notNull(),
     photoUrl: text('photo_url'),
