@@ -4,25 +4,26 @@ import { desc, eq, sql, and } from 'drizzle-orm';
 import { getIO } from '../config/socket.js';
 import cloudinary from '../config/cloudinary.js';
 
-const getCloudinaryPublicId = (photoUrl) => {
+const getCloudinaryPublicIdCandidates = (photoUrl) => {
     if (!photoUrl || !photoUrl.includes('res.cloudinary.com')) {
-        return null;
+        return [];
     }
 
     try {
         const { pathname } = new URL(photoUrl);
-        const uploadIndex = pathname.indexOf('/upload/');
+        const decodedPath = decodeURIComponent(pathname);
+        const folderIndex = decodedPath.indexOf('/biteyo/');
 
-        if (uploadIndex === -1) {
-            return null;
+        if (folderIndex === -1) {
+            return [];
         }
 
-        const pathAfterUpload = pathname.slice(uploadIndex + '/upload/'.length);
-        const pathWithoutVersion = pathAfterUpload.replace(/^v\d+\//, '');
+        const publicPath = decodedPath.slice(folderIndex + 1);
+        const publicIdWithoutFormat = publicPath.replace(/\.[^/.]+$/, '');
 
-        return pathWithoutVersion.replace(/\.[^/.]+$/, '');
+        return [...new Set([publicIdWithoutFormat, publicPath])];
     } catch {
-        return null;
+        return [];
     }
 };
 
@@ -271,10 +272,29 @@ export const deleteBite = async (req, res) => {
         }
 
         const [bite] = existingBite;
-        const publicId = getCloudinaryPublicId(bite.photoUrl);
+        const publicIdCandidates = getCloudinaryPublicIdCandidates(
+            bite.photoUrl
+        );
 
-        if (publicId) {
-            await cloudinary.uploader.destroy(publicId, { invalidate: true });
+        let cloudinaryDeleted = publicIdCandidates.length === 0;
+
+        for (const publicId of publicIdCandidates) {
+            const result = await cloudinary.uploader.destroy(publicId, {
+                invalidate: true,
+                resource_type: 'image',
+            });
+
+            if (result.result === 'ok') {
+                cloudinaryDeleted = true;
+                break;
+            }
+        }
+
+        if (!cloudinaryDeleted) {
+            console.warn('Cloudinary image was not deleted:', {
+                photoUrl: bite.photoUrl,
+                publicIdCandidates,
+            });
         }
 
         await db.delete(bites).where(eq(bites.id, id));

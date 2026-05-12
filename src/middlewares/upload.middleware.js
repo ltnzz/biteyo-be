@@ -1,5 +1,6 @@
 import multer from 'multer';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import path from 'node:path';
 
 import cloudinary from '../config/cloudinary.js';
 
@@ -17,7 +18,7 @@ const storage = new CloudinaryStorage({
             },
         ],
 
-        public_id: Date.now() + '-' + file.originalname,
+        public_id: `${Date.now()}-${path.parse(file.originalname).name}`,
     }),
 });
 
