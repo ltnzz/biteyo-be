@@ -292,15 +292,44 @@ export const getMe = async (req, res) => {
 };
 
 export const googleAuth = (req, res) => {
-    const url = getGoogleAuthUrl();
+    const state = crypto.randomBytes(16).toString('hex');
+
+    // simpan state di short-lived cookie untuk diverifikasi saat callback
+    res.cookie('oauth_state', state, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 10 * 60 * 1000, // 10 menit
+    });
+
+    const url = getGoogleAuthUrl(state);
     res.redirect(url);
 };
 
 export const googleCallback = async (req, res) => {
     try {
-        const { code } = req.query;
+        const { code, state, error } = req.query;
 
-        if (!code) {
+        // tangani user cancel atau error dari Google
+        if (error) {
+            console.error('Google OAuth error:', error);
+            return res.redirect(
+                `${process.env.CLIENT_URL}/login?error=oauth_failed`
+            );
+        }
+
+        if (!code || !state) {
+            return res.redirect(
+                `${process.env.CLIENT_URL}/login?error=oauth_failed`
+            );
+        }
+
+        // verifikasi state untuk mencegah CSRF
+        const savedState = req.cookies.oauth_state;
+        res.clearCookie('oauth_state');
+
+        if (!savedState || savedState !== state) {
+            console.error('OAuth state mismatch — possible CSRF attempt');
             return res.redirect(
                 `${process.env.CLIENT_URL}/login?error=oauth_failed`
             );
@@ -309,7 +338,11 @@ export const googleCallback = async (req, res) => {
         const tokenData = await exchangeCodeForTokens(code);
 
         if (tokenData.error) {
-            console.error('Google OAuth token error:', tokenData.error);
+            console.error(
+                'Google OAuth token error:',
+                tokenData.error,
+                tokenData.error_description
+            );
             return res.redirect(
                 `${process.env.CLIENT_URL}/login?error=oauth_failed`
             );
