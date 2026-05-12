@@ -2,20 +2,25 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import 'dotenv/config';
+import http from 'http';
+import { initSocket } from './config/socket.js';
 import authRoutes from './routes/auth.route.js';
 import mapsRoutes from './routes/maps.route.js';
 import feedRoutes from './routes/feed.route.js';
+import profileRoutes from './routes/profile.route.js';
 
 const app = express();
+const server = http.createServer(app);
 
 app.use(
     cors({
-        methods: ['GET', 'POST', 'PUT', 'DELETE'],
         origin: process.env.CLIENT_URL,
         credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     })
 );
+
+initSocket(server);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -28,9 +33,10 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/maps', mapsRoutes);
 app.use('/api/feed', feedRoutes);
+app.use('/api/profile', profileRoutes);
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
