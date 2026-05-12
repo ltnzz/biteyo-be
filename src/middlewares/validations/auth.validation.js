@@ -34,3 +34,7 @@ export const resetPasswordSchema = z.object({
         .max(64),
     confirm_password: z.string().min(1, 'Please confirm your password'),
 });
+
+export const googleSignInSchema = z.object({
+    id_token: z.string().min(1, 'Google ID token is required'),
+});

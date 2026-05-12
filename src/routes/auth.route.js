@@ -7,8 +7,7 @@ import {
     forgotPassword,
     resetPassword,
     getMe,
-    googleAuth,
-    googleCallback,
+    googleSignIn,
 } from '../controllers/auth.controller.js';
 
 import { protect } from '../middlewares/auth.middleware.js';
@@ -17,6 +16,7 @@ import {
     loginSchema,
     forgotPasswordSchema,
     resetPasswordSchema,
+    googleSignInSchema,
 } from '../middlewares/validations/auth.validation.js';
 import { validate } from '../middlewares/validate.middleware.js';
 
@@ -33,7 +33,6 @@ router.post(
 router.post('/logout', logout);
 router.get('/me', protect, getMe);
 
-router.get('/google', googleAuth);
-router.get('/google/callback', googleCallback);
+router.post('/google', validate(googleSignInSchema), googleSignIn);
 
 export default router;

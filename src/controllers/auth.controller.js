@@ -7,11 +7,9 @@ import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { sendEmail } from '../utils/email.js';
 import { resetPasswordTemplate } from '../templates/auth.email.template.js';
-import {
-    getGoogleAuthUrl,
-    exchangeCodeForTokens,
-    getGoogleUserInfo,
-} from '../utils/google.oauth.js';
+import { OAuth2Client } from 'google-auth-library';
+
+const googleClient = new OAuth2Client();
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -291,84 +289,33 @@ export const getMe = async (req, res) => {
     }
 };
 
-export const googleAuth = (req, res) => {
-    const state = crypto.randomBytes(16).toString('hex');
-
-    // simpan state di short-lived cookie untuk diverifikasi saat callback
-    res.cookie('oauth_state', state, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 10 * 60 * 1000, // 10 menit
-    });
-
-    const url = getGoogleAuthUrl(state);
-    res.redirect(url);
-};
-
-export const googleCallback = async (req, res) => {
+export const googleSignIn = async (req, res) => {
     try {
-        const { code, state, error } = req.query;
+        const { id_token } = req.body;
 
-        // tangani user cancel atau error dari Google
-        if (error) {
-            console.error('Google OAuth error:', error);
-            return res.redirect(
-                `${process.env.CLIENT_URL}/login?error=oauth_failed`
-            );
-        }
+        // verifikasi ID token langsung via google-auth-library
+        const ticket = await googleClient.verifyIdToken({
+            idToken: id_token,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
 
-        if (!code || !state) {
-            return res.redirect(
-                `${process.env.CLIENT_URL}/login?error=oauth_failed`
-            );
-        }
+        const { email, name, picture } = ticket.getPayload();
 
-        // verifikasi state untuk mencegah CSRF
-        const savedState = req.cookies.oauth_state;
-        res.clearCookie('oauth_state');
-
-        if (!savedState || savedState !== state) {
-            console.error('OAuth state mismatch — possible CSRF attempt');
-            return res.redirect(
-                `${process.env.CLIENT_URL}/login?error=oauth_failed`
-            );
-        }
-
-        const tokenData = await exchangeCodeForTokens(code);
-
-        if (tokenData.error) {
-            console.error(
-                'Google OAuth token error:',
-                tokenData.error,
-                tokenData.error_description
-            );
-            return res.redirect(
-                `${process.env.CLIENT_URL}/login?error=oauth_failed`
-            );
-        }
-
-        const googleUser = await getGoogleUserInfo(tokenData.access_token);
-
-        if (!googleUser.email) {
-            return res.redirect(
-                `${process.env.CLIENT_URL}/login?error=oauth_failed`
-            );
+        if (!email) {
+            return res.status(400).json({
+                message: 'Invalid Google account',
+            });
         }
 
         let [user] = await db
             .select()
             .from(users)
-            .where(eq(users.email, googleUser.email));
+            .where(eq(users.email, email));
 
         if (!user) {
             // User baru — buat akun otomatis
-            const username = await generateUniqueUsername(
-                googleUser.name,
-                googleUser.email
-            );
+            const username = await generateUniqueUsername(name, email);
 
-            // Generate random password — user OAuth tidak bisa login via password
             const randomPassword = await bcrypt.hash(
                 crypto.randomBytes(32).toString('hex'),
                 10
@@ -378,16 +325,16 @@ export const googleCallback = async (req, res) => {
                 .insert(users)
                 .values({
                     username,
-                    email: googleUser.email,
+                    email,
                     password: randomPassword,
-                    avatarUrl: googleUser.picture || null,
+                    avatarUrl: picture || null,
                 })
                 .returning();
-        } else if (!user.avatarUrl && googleUser.picture) {
+        } else if (!user.avatarUrl && picture) {
             // Update avatar jika belum punya
             [user] = await db
                 .update(users)
-                .set({ avatarUrl: googleUser.picture })
+                .set({ avatarUrl: picture })
                 .where(eq(users.id, user.id))
                 .returning();
         }
@@ -395,11 +342,16 @@ export const googleCallback = async (req, res) => {
         const token = generateToken(user.id);
         setTokenCookie(res, token);
 
-        return res.redirect(`${process.env.CLIENT_URL}/feed`);
+        const { password, ...safeUser } = user;
+
+        return res.status(200).json({
+            message: 'Google login success',
+            user: safeUser,
+        });
     } catch (error) {
-        console.error('Error in googleCallback controller', error);
-        return res.redirect(
-            `${process.env.CLIENT_URL}/login?error=server_error`
-        );
+        console.error('Error in googleSignIn controller', error);
+        return res.status(401).json({
+            message: 'Invalid Google token',
+        });
     }
 };
