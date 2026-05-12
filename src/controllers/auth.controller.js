@@ -1,16 +1,50 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { eq, or } from 'drizzle-orm';
 
 import { db } from '../db/index.js';
 import { users } from '../db/schema.js';
 import { sendEmail } from '../utils/email.js';
 import { resetPasswordTemplate } from '../templates/auth.email.template.js';
+import {
+    getGoogleAuthUrl,
+    exchangeCodeForTokens,
+    getGoogleUserInfo,
+} from '../utils/google.oauth.js';
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
         expiresIn: '7d',
     });
+};
+
+const setTokenCookie = (res, token) => {
+    res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+};
+
+const generateUniqueUsername = async (name, email) => {
+    let base = (name || email.split('@')[0])
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '')
+        .slice(0, 20);
+
+    if (base.length < 3) base = 'user' + base;
+
+    const [existing] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.username, base));
+
+    if (!existing) return base;
+
+    // Tambah suffix random 4 digit jika username sudah dipakai
+    return base.slice(0, 16) + '_' + Math.floor(1000 + Math.random() * 9000);
 };
 
 export const signUp = async (req, res) => {
@@ -47,12 +81,7 @@ export const signUp = async (req, res) => {
 
         const token = generateToken(newUser[0].id);
 
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        setTokenCookie(res, token);
 
         const { password: _, ...safeUser } = newUser[0];
 
@@ -96,12 +125,7 @@ export const signIn = async (req, res) => {
 
         const token = generateToken(user.id);
 
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+        setTokenCookie(res, token);
 
         const { password: _, ...safeUser } = user;
 
@@ -264,5 +288,85 @@ export const getMe = async (req, res) => {
         return res.status(500).json({
             message: 'Internal server error',
         });
+    }
+};
+
+export const googleAuth = (req, res) => {
+    const url = getGoogleAuthUrl();
+    res.redirect(url);
+};
+
+export const googleCallback = async (req, res) => {
+    try {
+        const { code } = req.query;
+
+        if (!code) {
+            return res.redirect(
+                `${process.env.CLIENT_URL}/login?error=oauth_failed`
+            );
+        }
+
+        const tokenData = await exchangeCodeForTokens(code);
+
+        if (tokenData.error) {
+            console.error('Google OAuth token error:', tokenData.error);
+            return res.redirect(
+                `${process.env.CLIENT_URL}/login?error=oauth_failed`
+            );
+        }
+
+        const googleUser = await getGoogleUserInfo(tokenData.access_token);
+
+        if (!googleUser.email) {
+            return res.redirect(
+                `${process.env.CLIENT_URL}/login?error=oauth_failed`
+            );
+        }
+
+        let [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.email, googleUser.email));
+
+        if (!user) {
+            // User baru — buat akun otomatis
+            const username = await generateUniqueUsername(
+                googleUser.name,
+                googleUser.email
+            );
+
+            // Generate random password — user OAuth tidak bisa login via password
+            const randomPassword = await bcrypt.hash(
+                crypto.randomBytes(32).toString('hex'),
+                10
+            );
+
+            [user] = await db
+                .insert(users)
+                .values({
+                    username,
+                    email: googleUser.email,
+                    password: randomPassword,
+                    avatarUrl: googleUser.picture || null,
+                })
+                .returning();
+        } else if (!user.avatarUrl && googleUser.picture) {
+            // Update avatar jika belum punya
+            [user] = await db
+                .update(users)
+                .set({ avatarUrl: googleUser.picture })
+                .where(eq(users.id, user.id))
+                .returning();
+        }
+
+        const token = generateToken(user.id);
+        setTokenCookie(res, token);
+
+        return res.redirect(`${process.env.CLIENT_URL}/feed`);
+    } catch (error) {
+        console.error('Error in googleCallback controller', error);
+        return res.redirect(
+            `${process.env.CLIENT_URL}/login?error=server_error`
+        );
     }
 };
