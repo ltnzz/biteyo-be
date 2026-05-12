@@ -21,10 +21,3 @@ export const protect = async (req, res, next) => {
         });
     }
 };
-
-export const guard = (req, res, next) => {
-    
-
-    next();
-
-}
