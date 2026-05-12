@@ -2,6 +2,29 @@ import { db } from '../db/index.js';
 import { bites, users, likes, comments, saved } from '../db/schema.js';
 import { desc, eq, sql, and } from 'drizzle-orm';
 import { getIO } from '../config/socket.js';
+import cloudinary from '../config/cloudinary.js';
+
+const getCloudinaryPublicId = (photoUrl) => {
+    if (!photoUrl || !photoUrl.includes('res.cloudinary.com')) {
+        return null;
+    }
+
+    try {
+        const { pathname } = new URL(photoUrl);
+        const uploadIndex = pathname.indexOf('/upload/');
+
+        if (uploadIndex === -1) {
+            return null;
+        }
+
+        const pathAfterUpload = pathname.slice(uploadIndex + '/upload/'.length);
+        const pathWithoutVersion = pathAfterUpload.replace(/^v\d+\//, '');
+
+        return pathWithoutVersion.replace(/\.[^/.]+$/, '');
+    } catch {
+        return null;
+    }
+};
 
 export const createBite = async (req, res) => {
     try {
@@ -245,6 +268,13 @@ export const deleteBite = async (req, res) => {
             return res.status(404).json({
                 message: 'Bite not found',
             });
+        }
+
+        const [bite] = existingBite;
+        const publicId = getCloudinaryPublicId(bite.photoUrl);
+
+        if (publicId) {
+            await cloudinary.uploader.destroy(publicId, { invalidate: true });
         }
 
         await db.delete(bites).where(eq(bites.id, id));
