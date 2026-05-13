@@ -2,6 +2,23 @@ import { eq, ne, and, desc, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { users, bites, follows, likes, comments, saved } from '../db/schema.js';
 import { createNotificationAndPush } from '../utils/notification.js';
+import { getIO } from '../config/socket.js';
+
+const getFollowStats = async ({ targetUserId, actorUserId }) => {
+    const [[{ targetFollowersCount }], [{ actorFollowingCount }]] =
+        await Promise.all([
+            db
+                .select({ targetFollowersCount: sql`count(*)::int` })
+                .from(follows)
+                .where(eq(follows.followingId, targetUserId)),
+            db
+                .select({ actorFollowingCount: sql`count(*)::int` })
+                .from(follows)
+                .where(eq(follows.followerId, actorUserId)),
+        ]);
+
+    return { targetFollowersCount, actorFollowingCount };
+};
 
 export const getProfile = async (req, res) => {
     try {
@@ -127,7 +144,7 @@ export const updateProfile = async (req, res) => {
     }
 };
 
-export const toggleFollowUser = async (req, res) => {
+export const followUser = async (req, res) => {
     try {
         const { username } = req.params;
         const currentUserId = req.user.id;
@@ -136,6 +153,7 @@ export const toggleFollowUser = async (req, res) => {
             .select({
                 id: users.id,
                 username: users.username,
+                avatarUrl: users.avatarUrl,
             })
             .from(users)
             .where(eq(users.username, username));
@@ -161,11 +179,15 @@ export const toggleFollowUser = async (req, res) => {
             );
 
         if (existingFollow) {
-            await db.delete(follows).where(eq(follows.id, existingFollow.id));
+            const followStats = await getFollowStats({
+                targetUserId: targetUser.id,
+                actorUserId: currentUserId,
+            });
 
             return res.status(200).json({
-                message: 'User unfollowed',
-                following: false,
+                message: 'Already following user',
+                following: true,
+                ...followStats,
             });
         }
 
@@ -189,13 +211,95 @@ export const toggleFollowUser = async (req, res) => {
             message: `${actor?.username || 'Someone'} started following you`,
         });
 
+        const followStats = await getFollowStats({
+            targetUserId: targetUser.id,
+            actorUserId: currentUserId,
+        });
+
+        getIO().emit('follow_status_updated', {
+            followerId: currentUserId,
+            followerUsername: actor?.username,
+            followingId: targetUser.id,
+            followingUsername: targetUser.username,
+            following: true,
+            ...followStats,
+        });
+
         return res.status(201).json({
             message: 'User followed',
             following: true,
             follow,
+            ...followStats,
         });
     } catch (error) {
-        console.error('Toggle follow error:', error);
+        console.error('Follow user error:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const unfollowUser = async (req, res) => {
+    try {
+        const { username } = req.params;
+        const currentUserId = req.user.id;
+
+        const [targetUser] = await db
+            .select({
+                id: users.id,
+                username: users.username,
+            })
+            .from(users)
+            .where(eq(users.username, username));
+
+        if (!targetUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (targetUser.id === currentUserId) {
+            return res.status(400).json({
+                message: 'You cannot unfollow yourself',
+            });
+        }
+
+        const [existingFollow] = await db
+            .select({ id: follows.id })
+            .from(follows)
+            .where(
+                and(
+                    eq(follows.followerId, currentUserId),
+                    eq(follows.followingId, targetUser.id)
+                )
+            );
+
+        if (existingFollow) {
+            await db.delete(follows).where(eq(follows.id, existingFollow.id));
+        }
+
+        const [actor] = await db
+            .select({ username: users.username })
+            .from(users)
+            .where(eq(users.id, currentUserId));
+
+        const followStats = await getFollowStats({
+            targetUserId: targetUser.id,
+            actorUserId: currentUserId,
+        });
+
+        getIO().emit('follow_status_updated', {
+            followerId: currentUserId,
+            followerUsername: actor?.username,
+            followingId: targetUser.id,
+            followingUsername: targetUser.username,
+            following: false,
+            ...followStats,
+        });
+
+        return res.status(200).json({
+            message: existingFollow ? 'User unfollowed' : 'User is not followed',
+            following: false,
+            ...followStats,
+        });
+    } catch (error) {
+        console.error('Unfollow user error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
