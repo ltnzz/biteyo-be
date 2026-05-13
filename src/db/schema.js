@@ -8,6 +8,7 @@ import {
     boolean,
     decimal,
     pgEnum,
+    uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 export const categoryEnum = pgEnum('category', [
@@ -136,3 +137,19 @@ export const notifications = pgTable('notifications', {
     read: boolean('read').default(false).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const fcmTokens = pgTable(
+    'fcm_tokens',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        userId: uuid('user_id')
+            .notNull()
+            .references(() => users.id, {
+                onDelete: 'cascade',
+            }),
+        token: text('token').notNull(),
+        createdAt: timestamp('created_at').defaultNow().notNull(),
+        updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    },
+    (table) => [uniqueIndex('fcm_tokens_token_unique').on(table.token)]
+);

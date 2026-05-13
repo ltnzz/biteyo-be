@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.route.js';
 import mapsRoutes from './routes/maps.route.js';
 import feedRoutes from './routes/feed.route.js';
 import profileRoutes from './routes/profile.route.js';
+import notificationRoutes from './routes/notification.route.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -34,6 +35,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/maps', mapsRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 const PORT = process.env.PORT || 5000;
 
