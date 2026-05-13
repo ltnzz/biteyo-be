@@ -3,6 +3,7 @@ import { bites, users, likes, comments, saved } from '../db/schema.js';
 import { desc, eq, sql, and } from 'drizzle-orm';
 import { getIO } from '../config/socket.js';
 import cloudinary from '../config/cloudinary.js';
+import { createNotificationAndPush } from '../utils/notification.js';
 
 const getCloudinaryPublicIdCandidates = (photoUrl) => {
     if (!photoUrl || !photoUrl.includes('res.cloudinary.com')) {
@@ -25,6 +26,21 @@ const getCloudinaryPublicIdCandidates = (photoUrl) => {
     } catch {
         return [];
     }
+};
+
+const getBiteEngagement = async (biteId) => {
+    const [[{ likesCount }], [{ commentsCount }]] = await Promise.all([
+        db
+            .select({ likesCount: sql`count(*)::int` })
+            .from(likes)
+            .where(eq(likes.biteId, biteId)),
+        db
+            .select({ commentsCount: sql`count(*)::int` })
+            .from(comments)
+            .where(eq(comments.biteId, biteId)),
+    ]);
+
+    return { likesCount, commentsCount };
 };
 
 export const createBite = async (req, res) => {
@@ -166,6 +182,180 @@ export const getBite = async (req, res) => {
         res.status(500).json({
             message: 'internal server error',
         });
+    }
+};
+
+export const toggleLikeBite = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+
+        const [bite] = await db
+            .select({
+                id: bites.id,
+                userId: bites.userId,
+                foodName: bites.foodName,
+            })
+            .from(bites)
+            .where(eq(bites.id, id));
+
+        if (!bite) {
+            return res.status(404).json({ message: 'Bite not found' });
+        }
+
+        const [existingLike] = await db
+            .select({ id: likes.id })
+            .from(likes)
+            .where(and(eq(likes.userId, userId), eq(likes.biteId, id)));
+
+        if (existingLike) {
+            await db.delete(likes).where(eq(likes.id, existingLike.id));
+            const engagement = await getBiteEngagement(id);
+
+            getIO().emit('bite_unliked', {
+                biteId: id,
+                userId,
+                unlikedByUserId: userId,
+                liked: false,
+                ...engagement,
+            });
+
+            getIO().emit('bite_engagement_updated', {
+                biteId: id,
+                unlikedByUserId: userId,
+                liked: false,
+                ...engagement,
+            });
+
+            return res.status(200).json({
+                message: 'Bite unliked',
+                liked: false,
+                ...engagement,
+            });
+        }
+
+        const [like] = await db
+            .insert(likes)
+            .values({ userId, biteId: id })
+            .returning();
+
+        const [actor] = await db
+            .select({ username: users.username })
+            .from(users)
+            .where(eq(users.id, userId));
+
+        await createNotificationAndPush({
+            toUserId: bite.userId,
+            fromUserId: userId,
+            type: 'like',
+            biteId: id,
+            message: `${actor?.username || 'Someone'} liked your ${bite.foodName} post`,
+        });
+
+        const engagement = await getBiteEngagement(id);
+
+        getIO().emit('bite_liked', {
+            biteId: id,
+            userId,
+            likedByUserId: userId,
+            liked: true,
+            ...engagement,
+        });
+
+        getIO().emit('bite_engagement_updated', {
+            biteId: id,
+            likedByUserId: userId,
+            liked: true,
+            ...engagement,
+        });
+
+        return res.status(201).json({
+            message: 'Bite liked',
+            liked: true,
+            like,
+            ...engagement,
+        });
+    } catch (error) {
+        console.error('Toggle like error:', error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+};
+
+export const createComment = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const { content } = req.body;
+
+        if (!content || typeof content !== 'string' || !content.trim()) {
+            return res.status(400).json({ message: 'Comment is required' });
+        }
+
+        const [bite] = await db
+            .select({
+                id: bites.id,
+                userId: bites.userId,
+                foodName: bites.foodName,
+            })
+            .from(bites)
+            .where(eq(bites.id, id));
+
+        if (!bite) {
+            return res.status(404).json({ message: 'Bite not found' });
+        }
+
+        const [comment] = await db
+            .insert(comments)
+            .values({
+                userId,
+                biteId: id,
+                content: content.trim(),
+            })
+            .returning();
+
+        const [actor] = await db
+            .select({
+                id: users.id,
+                username: users.username,
+                avatarUrl: users.avatarUrl,
+            })
+            .from(users)
+            .where(eq(users.id, userId));
+
+        await createNotificationAndPush({
+            toUserId: bite.userId,
+            fromUserId: userId,
+            type: 'comment',
+            biteId: id,
+            message: `${actor?.username || 'Someone'} commented on your ${bite.foodName} post`,
+        });
+
+        const engagement = await getBiteEngagement(id);
+
+        getIO().emit('new_comment', {
+            ...comment,
+            user: actor,
+            likesCount: engagement.likesCount,
+            commentsCount: engagement.commentsCount,
+        });
+
+        getIO().emit('bite_engagement_updated', {
+            biteId: id,
+            commentedByUserId: userId,
+            ...engagement,
+        });
+
+        return res.status(201).json({
+            message: 'Comment created',
+            comment: {
+                ...comment,
+                user: actor,
+            },
+            ...engagement,
+        });
+    } catch (error) {
+        console.error('Create comment error:', error);
+        return res.status(500).json({ message: 'Server error' });
     }
 };
 

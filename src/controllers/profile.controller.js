@@ -1,6 +1,7 @@
 import { eq, ne, and, desc, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { users, bites, follows, likes, comments, saved } from '../db/schema.js';
+import { createNotificationAndPush } from '../utils/notification.js';
 
 export const getProfile = async (req, res) => {
     try {
@@ -123,6 +124,79 @@ export const updateProfile = async (req, res) => {
         return res.status(500).json({
             message: 'Internal server error',
         });
+    }
+};
+
+export const toggleFollowUser = async (req, res) => {
+    try {
+        const { username } = req.params;
+        const currentUserId = req.user.id;
+
+        const [targetUser] = await db
+            .select({
+                id: users.id,
+                username: users.username,
+            })
+            .from(users)
+            .where(eq(users.username, username));
+
+        if (!targetUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (targetUser.id === currentUserId) {
+            return res.status(400).json({
+                message: 'You cannot follow yourself',
+            });
+        }
+
+        const [existingFollow] = await db
+            .select({ id: follows.id })
+            .from(follows)
+            .where(
+                and(
+                    eq(follows.followerId, currentUserId),
+                    eq(follows.followingId, targetUser.id)
+                )
+            );
+
+        if (existingFollow) {
+            await db.delete(follows).where(eq(follows.id, existingFollow.id));
+
+            return res.status(200).json({
+                message: 'User unfollowed',
+                following: false,
+            });
+        }
+
+        const [follow] = await db
+            .insert(follows)
+            .values({
+                followerId: currentUserId,
+                followingId: targetUser.id,
+            })
+            .returning();
+
+        const [actor] = await db
+            .select({ username: users.username })
+            .from(users)
+            .where(eq(users.id, currentUserId));
+
+        await createNotificationAndPush({
+            toUserId: targetUser.id,
+            fromUserId: currentUserId,
+            type: 'follow',
+            message: `${actor?.username || 'Someone'} started following you`,
+        });
+
+        return res.status(201).json({
+            message: 'User followed',
+            following: true,
+            follow,
+        });
+    } catch (error) {
+        console.error('Toggle follow error:', error);
+        return res.status(500).json({ message: 'Internal server error' });
     }
 };
 

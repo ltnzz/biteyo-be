@@ -4,6 +4,8 @@ import {
     getBite,
     updateBite,
     deleteBite,
+    toggleLikeBite,
+    createComment,
 } from '../controllers/feed.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
 import { upload } from '../middlewares/upload.middleware.js';
@@ -25,5 +27,7 @@ router.post(
 );
 router.patch('/bites/:id', protect, validate(updateBiteSchema), updateBite);
 router.delete('/bites/:id', protect, deleteBite);
+router.post('/bites/:id/like', protect, toggleLikeBite);
+router.post('/bites/:id/comments', protect, createComment);
 
 export default router;

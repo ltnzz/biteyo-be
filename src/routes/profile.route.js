@@ -5,6 +5,7 @@ import {
     deleteAccount,
     getUserBites,
     getSavedBites,
+    toggleFollowUser,
 } from '../controllers/profile.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
 import { upload } from '../middlewares/upload.middleware.js';
@@ -16,6 +17,7 @@ const router = express.Router();
 // ⚠️ route statis harus di atas route dinamis /:username
 router.get('/saved', protect, getSavedBites);
 
+router.post('/:username/follow', protect, toggleFollowUser);
 router.get('/:username', protect, getProfile);
 router.get('/:username/bites', protect, getUserBites);
 
