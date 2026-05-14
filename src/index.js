@@ -13,9 +13,20 @@ import notificationRoutes from './routes/notification.route.js';
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [
+    'https://biteyo-fe.vercel.app',
+    'http://localhost:5173',
+];
+
 app.use(
     cors({
-        origin: process.env.CLIENT_URL || 'http://localhost:5173',
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     })
