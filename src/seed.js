@@ -36,8 +36,8 @@ function pickN(arr, n) {
 
 // ─── DATA ─────────────────────────────────────────────────────────────────────
 
-const DEFAULT_AVATAR_URL = '/public/images/avatars/profile1.jpg';
-const DEFAULT_BITE_PHOTO_URL = '/public/images/bites/foto1.jpg';
+const DEFAULT_AVATAR_URL = '/images/avatars/profile1.jpg';
+const DEFAULT_BITE_PHOTO_URL = '/images/bites/foto1.jpg';
 
 const userData = [
     {
