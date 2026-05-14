@@ -2,6 +2,7 @@ import express from 'express';
 import {
     createBite,
     getBite,
+    getBiteById,
     updateBite,
     deleteBite,
     toggleLikeBite,
@@ -23,10 +24,14 @@ router.get('/bites', protect, getBite);
 router.post(
     '/bites',
     protect,
-    upload.single('photo'),
+    upload.fields([
+        { name: 'photo', maxCount: 1 },
+        { name: 'image', maxCount: 1 },
+    ]),
     validate(createBiteSchema),
     createBite
 );
+router.get('/bites/:id', protect, getBiteById);
 router.patch('/bites/:id', protect, validate(updateBiteSchema), updateBite);
 router.delete('/bites/:id', protect, deleteBite);
 router.post('/bites/:id/view', protect, recordBiteView);

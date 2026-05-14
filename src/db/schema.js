@@ -34,6 +34,7 @@ export const users = pgTable('users', {
     password: varchar('password', { length: 64 }).notNull(),
     bio: varchar('bio', { length: 255 }),
     avatarUrl: text('avatar_url'),
+    bannerUrl: text('banner_url'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

@@ -4,10 +4,24 @@ import path from 'node:path';
 
 import cloudinary from '../config/cloudinary.js';
 
+const getUploadFolder = (file) => {
+    const foldersByField = {
+        photo: 'biteyo/feed/bites',
+        image: 'biteyo/feed/bites',
+        avatar: 'biteyo/profile/avatars',
+        profileImage: 'biteyo/profile/avatars',
+        banner: 'biteyo/profile/banners',
+        bannerImage: 'biteyo/profile/banners',
+        cover: 'biteyo/profile/banners',
+    };
+
+    return foldersByField[file.fieldname] || 'biteyo/misc';
+};
+
 const storage = new CloudinaryStorage({
     cloudinary,
     params: async (req, file) => ({
-        folder: 'biteyo',
+        folder: getUploadFolder(file),
 
         transformation: [
             {

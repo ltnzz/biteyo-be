@@ -26,7 +26,13 @@ router.get('/:username/bites', protect, getUserBites);
 router.patch(
     '/',
     protect,
-    upload.single('avatar'),
+    upload.fields([
+        { name: 'avatar', maxCount: 1 },
+        { name: 'profileImage', maxCount: 1 },
+        { name: 'banner', maxCount: 1 },
+        { name: 'bannerImage', maxCount: 1 },
+        { name: 'cover', maxCount: 1 },
+    ]),
     validate(updateProfileSchema),
     updateProfile
 );

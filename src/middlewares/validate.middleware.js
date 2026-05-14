@@ -1,5 +1,5 @@
 export const validate = (schema) => (req, res, next) => {
-    const result = schema.safeParse(req.body);
+    const result = schema.safeParse(req.body || {});
 
     if (!result.success) {
         console.log(result.error);

@@ -86,6 +86,7 @@ export const signUp = async (req, res) => {
 
         return res.status(201).json({
             message: 'Signup success',
+            token,
             user: safeUser,
         });
     } catch (error) {
@@ -130,6 +131,7 @@ export const signIn = async (req, res) => {
 
         return res.status(200).json({
             message: 'Login success',
+            token,
             user: safeUser,
         });
     } catch (error) {
@@ -294,6 +296,12 @@ export const googleSignIn = async (req, res) => {
     try {
         const { id_token } = req.body;
 
+        if (!process.env.GOOGLE_CLIENT_ID) {
+            return res.status(500).json({
+                message: 'Google client ID is not configured',
+            });
+        }
+
         // verifikasi ID token langsung via google-auth-library
         const ticket = await googleClient.verifyIdToken({
             idToken: id_token,
@@ -347,6 +355,7 @@ export const googleSignIn = async (req, res) => {
 
         return res.status(200).json({
             message: 'Google login success',
+            token,
             user: safeUser,
         });
     } catch (error) {

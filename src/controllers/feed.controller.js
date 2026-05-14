@@ -121,7 +121,9 @@ const getTrendingStatusSql = () =>
 
 export const createBite = async (req, res) => {
     try {
-        if (!req.file) {
+        const uploadedPhoto = req.files?.photo?.[0] || req.files?.image?.[0];
+
+        if (!uploadedPhoto) {
             return res.status(400).json({
                 message: 'Photo is required',
             });
@@ -142,7 +144,7 @@ export const createBite = async (req, res) => {
 
         const userId = req.user.id;
 
-        const photoUrl = req.file.path;
+        const photoUrl = uploadedPhoto.path;
 
         const [newBite] = await db
             .insert(bites)
@@ -247,9 +249,13 @@ export const getBite = async (req, res) => {
             .leftJoin(saved, eq(saved.biteId, bites.id))
             .groupBy(bites.id, users.id);
 
-        const feeds = await (sort === 'viral' || sort === 'trending'
-            ? query.orderBy(desc(getBiteViralScoreSql()), desc(bites.createdAt))
-            : query.orderBy(desc(bites.createdAt))
+        const feeds = await (
+            sort === 'viral' || sort === 'trending'
+                ? query.orderBy(
+                      desc(getBiteViralScoreSql()),
+                      desc(bites.createdAt)
+                  )
+                : query.orderBy(desc(bites.createdAt))
         )
             .limit(limit)
             .offset(offset);
@@ -268,6 +274,63 @@ export const getBite = async (req, res) => {
         res.status(500).json({
             message: 'internal server error',
         });
+    }
+};
+
+export const getBiteById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const counts = getBiteCountsSql();
+
+        const [bite] = await db
+            .select({
+                id: bites.id,
+                foodName: bites.foodName,
+                locationName: bites.locationName,
+                locationAddress: bites.locationAddress,
+                latitude: bites.latitude,
+                longitude: bites.longitude,
+                placeId: bites.placeId,
+                review: bites.review,
+                rating: bites.rating,
+                photoUrl: bites.photoUrl,
+                category: bites.category,
+                viewsCount: bites.viewsCount,
+                isTrending: getTrendingStatusSql(),
+                viralScore: getBiteViralScoreSql(),
+                createdAt: bites.createdAt,
+
+                user: {
+                    id: users.id,
+                    username: users.username,
+                    avatarUrl: users.avatarUrl,
+                },
+
+                likesCount: counts.likesCount,
+                commentsCount: counts.commentsCount,
+                isLiked: sql`coalesce(bool_or(${likes.userId} = ${userId}), false)`,
+                isSaved: sql`coalesce(bool_or(${saved.userId} = ${userId}), false)`,
+            })
+            .from(bites)
+            .leftJoin(users, eq(bites.userId, users.id))
+            .leftJoin(likes, eq(likes.biteId, bites.id))
+            .leftJoin(comments, eq(comments.biteId, bites.id))
+            .leftJoin(saved, eq(saved.biteId, bites.id))
+            .where(eq(bites.id, id))
+            .groupBy(bites.id, users.id);
+
+        if (!bite) {
+            return res.status(404).json({ message: 'Bite not found' });
+        }
+
+        return res.status(200).json({
+            message: 'success',
+            bite,
+        });
+    } catch (error) {
+        console.error('Get bite by id error:', error);
+        return res.status(500).json({ message: 'Server error' });
     }
 };
 

@@ -29,6 +29,20 @@
             "when": 1778730000000,
             "tag": "0003_add_bite_views_count",
             "breakpoints": true
+        },
+        {
+            "idx": 4,
+            "version": "7",
+            "when": 1778774044203,
+            "tag": "0004_pretty_mephistopheles",
+            "breakpoints": true
+        },
+        {
+            "idx": 5,
+            "version": "7",
+            "when": 1778774312258,
+            "tag": "0005_add_profile_banner",
+            "breakpoints": true
         }
     ]
 }

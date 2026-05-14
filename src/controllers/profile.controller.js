@@ -36,6 +36,7 @@ export const getProfile = async (req, res) => {
                 username: users.username,
                 bio: users.bio,
                 avatarUrl: users.avatarUrl,
+                bannerUrl: users.bannerUrl,
                 createdAt: users.createdAt,
             })
             .from(users)
@@ -101,10 +102,15 @@ export const updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
         const { username, bio } = req.body;
-        const avatarUrl = req.file?.path;
+        const avatarUrl =
+            req.files?.avatar?.[0]?.path || req.files?.profileImage?.[0]?.path;
+        const bannerUrl =
+            req.files?.banner?.[0]?.path ||
+            req.files?.bannerImage?.[0]?.path ||
+            req.files?.cover?.[0]?.path;
 
         // cek jika tidak ada field yang diupdate sama sekali
-        if (!username && bio === undefined && !avatarUrl) {
+        if (!username && bio === undefined && !avatarUrl && !bannerUrl) {
             return res.status(400).json({
                 message: 'No fields to update',
             });
@@ -128,6 +134,7 @@ export const updateProfile = async (req, res) => {
         if (username) updateData.username = username;
         if (bio !== undefined) updateData.bio = bio;
         if (avatarUrl) updateData.avatarUrl = avatarUrl;
+        if (bannerUrl) updateData.bannerUrl = bannerUrl;
 
         const [updatedUser] = await db
             .update(users)
@@ -299,7 +306,9 @@ export const unfollowUser = async (req, res) => {
         });
 
         return res.status(200).json({
-            message: existingFollow ? 'User unfollowed' : 'User is not followed',
+            message: existingFollow
+                ? 'User unfollowed'
+                : 'User is not followed',
             following: false,
             ...followStats,
         });
