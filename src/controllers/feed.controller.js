@@ -5,6 +5,11 @@ import { getIO } from '../config/socket.js';
 import cloudinary from '../config/cloudinary.js';
 import { createNotificationAndPush } from '../utils/notification.js';
 
+const VIRAL_SCORE_THRESHOLD = 20;
+
+const getViralScoreSql = (viewsCount, likesCount, commentsCount) =>
+    sql`(${viewsCount} * 1 + ${likesCount} * 3 + ${commentsCount} * 5)::int`;
+
 const getCloudinaryPublicIdCandidates = (photoUrl) => {
     if (!photoUrl || !photoUrl.includes('res.cloudinary.com')) {
         return [];
@@ -29,19 +34,90 @@ const getCloudinaryPublicIdCandidates = (photoUrl) => {
 };
 
 const getBiteEngagement = async (biteId) => {
-    const [[{ likesCount }], [{ commentsCount }]] = await Promise.all([
-        db
-            .select({ likesCount: sql`count(*)::int` })
-            .from(likes)
-            .where(eq(likes.biteId, biteId)),
-        db
-            .select({ commentsCount: sql`count(*)::int` })
-            .from(comments)
-            .where(eq(comments.biteId, biteId)),
-    ]);
+    const [[{ viewsCount }], [{ likesCount }], [{ commentsCount }]] =
+        await Promise.all([
+            db
+                .select({ viewsCount: bites.viewsCount })
+                .from(bites)
+                .where(eq(bites.id, biteId)),
+            db
+                .select({ likesCount: sql`count(*)::int` })
+                .from(likes)
+                .where(eq(likes.biteId, biteId)),
+            db
+                .select({ commentsCount: sql`count(*)::int` })
+                .from(comments)
+                .where(eq(comments.biteId, biteId)),
+        ]);
 
-    return { likesCount, commentsCount };
+    const viralScore =
+        Number(viewsCount || 0) +
+        Number(likesCount || 0) * 3 +
+        Number(commentsCount || 0) * 5;
+    const isTrending = viralScore >= VIRAL_SCORE_THRESHOLD;
+
+    await db
+        .update(bites)
+        .set({
+            isTrending,
+            updatedAt: new Date(),
+        })
+        .where(eq(bites.id, biteId));
+
+    return { viewsCount, likesCount, commentsCount, viralScore, isTrending };
 };
+
+export const recordBiteView = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const [viewedBite] = await db
+            .update(bites)
+            .set({
+                viewsCount: sql`${bites.viewsCount} + 1`,
+                updatedAt: new Date(),
+            })
+            .where(eq(bites.id, id))
+            .returning({
+                id: bites.id,
+                viewsCount: bites.viewsCount,
+            });
+
+        if (!viewedBite) {
+            return res.status(404).json({ message: 'Bite not found' });
+        }
+
+        const engagement = await getBiteEngagement(id);
+
+        getIO().emit('bite_engagement_updated', {
+            biteId: id,
+            ...engagement,
+        });
+
+        return res.status(200).json({
+            message: 'Bite view recorded',
+            ...engagement,
+        });
+    } catch (error) {
+        console.error('Record bite view error:', error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+};
+
+const getBiteCountsSql = () => ({
+    likesCount: sql`count(distinct ${likes.id})::int`,
+    commentsCount: sql`count(distinct ${comments.id})::int`,
+});
+
+const getBiteViralScoreSql = () =>
+    getViralScoreSql(
+        bites.viewsCount,
+        sql`count(distinct ${likes.id})`,
+        sql`count(distinct ${comments.id})`
+    );
+
+const getTrendingStatusSql = () =>
+    sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`;
 
 export const createBite = async (req, res) => {
     try {
@@ -100,8 +176,10 @@ export const createBite = async (req, res) => {
         getIO().emit('new_bite', {
             ...newBite,
             user: userInfo,
+            viewsCount: 0,
             likesCount: 0,
             commentsCount: 0,
+            viralScore: 0,
             isLiked: false,
             isSaved: false,
         });
@@ -125,8 +203,10 @@ export const getBite = async (req, res) => {
         const page = Math.max(parseInt(req.query.page) || 1, 1);
         const limit = Math.min(parseInt(req.query.limit) || 10, 50);
         const offset = (page - 1) * limit;
+        const sort = req.query.sort;
+        const counts = getBiteCountsSql();
 
-        const feeds = await db
+        const query = db
             .select({
                 id: bites.id,
                 foodName: bites.foodName,
@@ -139,7 +219,9 @@ export const getBite = async (req, res) => {
                 rating: bites.rating,
                 photoUrl: bites.photoUrl,
                 category: bites.category,
-                isTrending: bites.isTrending,
+                viewsCount: bites.viewsCount,
+                isTrending: getTrendingStatusSql(),
+                viralScore: getBiteViralScoreSql(),
                 createdAt: bites.createdAt,
 
                 user: {
@@ -149,8 +231,8 @@ export const getBite = async (req, res) => {
                 },
 
                 // total likes & comments sebagai number (bukan string)
-                likesCount: sql`count(distinct ${likes.id})::int`,
-                commentsCount: sql`count(distinct ${comments.id})::int`,
+                likesCount: counts.likesCount,
+                commentsCount: counts.commentsCount,
 
                 // apakah current user sudah like bite ini
                 isLiked: sql`coalesce(bool_or(${likes.userId} = ${userId}), false)`,
@@ -163,8 +245,12 @@ export const getBite = async (req, res) => {
             .leftJoin(likes, eq(likes.biteId, bites.id))
             .leftJoin(comments, eq(comments.biteId, bites.id))
             .leftJoin(saved, eq(saved.biteId, bites.id))
-            .groupBy(bites.id, users.id)
-            .orderBy(desc(bites.createdAt))
+            .groupBy(bites.id, users.id);
+
+        const feeds = await (sort === 'viral' || sort === 'trending'
+            ? query.orderBy(desc(getBiteViralScoreSql()), desc(bites.createdAt))
+            : query.orderBy(desc(bites.createdAt))
+        )
             .limit(limit)
             .offset(offset);
 

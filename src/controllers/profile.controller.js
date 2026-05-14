@@ -4,6 +4,11 @@ import { users, bites, follows, likes, comments, saved } from '../db/schema.js';
 import { createNotificationAndPush } from '../utils/notification.js';
 import { getIO } from '../config/socket.js';
 
+const VIRAL_SCORE_THRESHOLD = 20;
+
+const getBiteViralScoreSql = () =>
+    sql`(${bites.viewsCount} * 1 + count(distinct ${likes.id}) * 3 + count(distinct ${comments.id}) * 5)::int`;
+
 const getFollowStats = async ({ targetUserId, actorUserId }) => {
     const [[{ targetFollowersCount }], [{ actorFollowingCount }]] =
         await Promise.all([
@@ -367,7 +372,9 @@ export const getUserBites = async (req, res) => {
                 rating: bites.rating,
                 photoUrl: bites.photoUrl,
                 category: bites.category,
-                isTrending: bites.isTrending,
+                viewsCount: bites.viewsCount,
+                isTrending: sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`,
+                viralScore: getBiteViralScoreSql(),
                 createdAt: bites.createdAt,
 
                 user: {
@@ -430,7 +437,9 @@ export const getSavedBites = async (req, res) => {
                 rating: bites.rating,
                 photoUrl: bites.photoUrl,
                 category: bites.category,
-                isTrending: bites.isTrending,
+                viewsCount: bites.viewsCount,
+                isTrending: sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`,
+                viralScore: getBiteViralScoreSql(),
                 createdAt: bites.createdAt,
                 savedAt: saved.createdAt,
 

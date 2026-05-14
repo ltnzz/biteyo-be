@@ -7,6 +7,7 @@ import {
     toggleLikeBite,
     createComment,
     getBiteComments,
+    recordBiteView,
 } from '../controllers/feed.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
 import { upload } from '../middlewares/upload.middleware.js';
@@ -28,6 +29,7 @@ router.post(
 );
 router.patch('/bites/:id', protect, validate(updateBiteSchema), updateBite);
 router.delete('/bites/:id', protect, deleteBite);
+router.post('/bites/:id/view', protect, recordBiteView);
 router.post('/bites/:id/like', protect, toggleLikeBite);
 router.get('/bites/:id/comments', protect, getBiteComments);
 router.post('/bites/:id/comments', protect, createComment);

@@ -249,6 +249,7 @@ async function seed() {
     const biteValues = biteData.map((b, i) => ({
         ...b,
         userId: userIds[i % userIds.length],
+        viewsCount: b.isTrending ? 35 + i * 3 : 5 + i,
     }));
     const insertedBites = await db.insert(bites).values(biteValues).returning();
     console.log(`   ✅ ${insertedBites.length} bites inserted`);

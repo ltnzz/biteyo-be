@@ -68,6 +68,7 @@ export const bites = pgTable('bites', {
     rating: integer('rating').notNull(),
     photoUrl: text('photo_url').notNull(),
     category: categoryEnum('category').notNull(),
+    viewsCount: integer('views_count').default(0).notNull(),
     isTrending: boolean('is_trending').default(false),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
