@@ -32,6 +32,11 @@ app.use(
     })
 );
 
+app.use((req, res, next) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    next();
+});
+
 initSocket(server);
 
 app.use(express.json());
