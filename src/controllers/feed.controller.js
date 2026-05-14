@@ -359,6 +359,50 @@ export const createComment = async (req, res) => {
     }
 };
 
+export const getBiteComments = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const [bite] = await db
+            .select({
+                id: bites.id,
+                foodName: bites.foodName,
+            })
+            .from(bites)
+            .where(eq(bites.id, id));
+
+        if (!bite) {
+            return res.status(404).json({ message: 'Bite not found' });
+        }
+
+        const biteComments = await db
+            .select({
+                id: comments.id,
+                content: comments.content,
+                createdAt: comments.createdAt,
+                user: {
+                    id: users.id,
+                    username: users.username,
+                    avatarUrl: users.avatarUrl,
+                },
+            })
+            .from(comments)
+            .leftJoin(users, eq(comments.userId, users.id))
+            .where(eq(comments.biteId, id))
+            .orderBy(desc(comments.createdAt));
+
+        return res.status(200).json({
+            message: 'success',
+            bite,
+            comments: biteComments,
+            commentsCount: biteComments.length,
+        });
+    } catch (error) {
+        console.error('Get comments error:', error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+};
+
 // export const getBiteById = async (req, res) => {
 //     try {
 //         const feeds = await db
