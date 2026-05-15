@@ -473,68 +473,110 @@ export const getSavedBites = async (req, res) => {
     }
 };
 
+const getLikedBitesByUserId = async ({ targetUserId, currentUserId, page, limit }) => {
+    const userLikes = alias(likes, 'user_likes');
+    const offset = (page - 1) * limit;
+
+    return db
+        .select({
+            id: bites.id,
+            foodName: bites.foodName,
+            locationName: bites.locationName,
+            locationAddress: bites.locationAddress,
+            latitude: bites.latitude,
+            longitude: bites.longitude,
+            placeId: bites.placeId,
+            review: bites.review,
+            rating: bites.rating,
+            photoUrl: bites.photoUrl,
+            category: bites.category,
+            viewsCount: bites.viewsCount,
+            isTrending: sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`,
+            viralScore: getBiteViralScoreSql(),
+            createdAt: bites.createdAt,
+            likedAt: userLikes.createdAt,
+
+            user: {
+                id: users.id,
+                username: users.username,
+                avatarUrl: users.avatarUrl,
+            },
+
+            likesCount: sql`count(distinct ${likes.id})::int`,
+            commentsCount: sql`count(distinct ${comments.id})::int`,
+            isLiked: sql`coalesce(bool_or(${likes.userId} = ${currentUserId}), false)`,
+            isSaved: sql`coalesce(bool_or(${saved.userId} = ${currentUserId}), false)`,
+        })
+        .from(userLikes)
+        .innerJoin(bites, eq(userLikes.biteId, bites.id))
+        .leftJoin(users, eq(bites.userId, users.id))
+        .leftJoin(likes, eq(likes.biteId, bites.id))
+        .leftJoin(comments, eq(comments.biteId, bites.id))
+        .leftJoin(saved, eq(saved.biteId, bites.id))
+        .where(eq(userLikes.userId, targetUserId))
+        .groupBy(bites.id, users.id, userLikes.id)
+        .orderBy(desc(userLikes.createdAt))
+        .limit(limit)
+        .offset(offset);
+};
+
+const getLikedBitesResponse = async ({ req, res, targetUserId }) => {
+    const currentUserId = req.user.id;
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit) || 12, 50);
+    const likedBites = await getLikedBitesByUserId({
+        targetUserId,
+        currentUserId,
+        page,
+        limit,
+    });
+
+    return res.status(200).json({
+        message: 'success',
+        data: likedBites,
+        pagination: {
+            page,
+            limit,
+            hasMore: likedBites.length === limit,
+        },
+    });
+};
+
 export const getLikedBites = async (req, res) => {
     try {
-        const currentUserId = req.user.id;
-        const userLikes = alias(likes, 'user_likes');
-
-        const page = Math.max(parseInt(req.query.page) || 1, 1);
-        const limit = Math.min(parseInt(req.query.limit) || 12, 50);
-        const offset = (page - 1) * limit;
-
-        const likedBites = await db
-            .select({
-                id: bites.id,
-                foodName: bites.foodName,
-                locationName: bites.locationName,
-                locationAddress: bites.locationAddress,
-                latitude: bites.latitude,
-                longitude: bites.longitude,
-                placeId: bites.placeId,
-                review: bites.review,
-                rating: bites.rating,
-                photoUrl: bites.photoUrl,
-                category: bites.category,
-                viewsCount: bites.viewsCount,
-                isTrending: sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`,
-                viralScore: getBiteViralScoreSql(),
-                createdAt: bites.createdAt,
-                likedAt: userLikes.createdAt,
-
-                user: {
-                    id: users.id,
-                    username: users.username,
-                    avatarUrl: users.avatarUrl,
-                },
-
-                likesCount: sql`count(distinct ${likes.id})::int`,
-                commentsCount: sql`count(distinct ${comments.id})::int`,
-                isLiked: sql`true`,
-                isSaved: sql`coalesce(bool_or(${saved.userId} = ${currentUserId}), false)`,
-            })
-            .from(userLikes)
-            .innerJoin(bites, eq(userLikes.biteId, bites.id))
-            .leftJoin(users, eq(bites.userId, users.id))
-            .leftJoin(likes, eq(likes.biteId, bites.id))
-            .leftJoin(comments, eq(comments.biteId, bites.id))
-            .leftJoin(saved, eq(saved.biteId, bites.id))
-            .where(eq(userLikes.userId, currentUserId))
-            .groupBy(bites.id, users.id, userLikes.id)
-            .orderBy(desc(userLikes.createdAt))
-            .limit(limit)
-            .offset(offset);
-
-        return res.status(200).json({
-            message: 'success',
-            data: likedBites,
-            pagination: {
-                page,
-                limit,
-                hasMore: likedBites.length === limit,
-            },
+        return getLikedBitesResponse({
+            req,
+            res,
+            targetUserId: req.user.id,
         });
     } catch (error) {
         console.error('Error in getLikedBites controller', error);
+        return res.status(500).json({
+            message: 'Internal server error',
+        });
+    }
+};
+
+export const getUserLikedBites = async (req, res) => {
+    try {
+        const [user] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.username, req.params.username));
+
+        if (!user) {
+            return res.status(404).json({
+                message: 'User not found',
+            });
+        }
+
+        return getLikedBitesResponse({
+            req,
+            res,
+            targetUserId: user.id,
+        });
+    } catch (error) {
+        console.error('Error in getUserLikedBites controller', error);
         return res.status(500).json({
             message: 'Internal server error',
         });

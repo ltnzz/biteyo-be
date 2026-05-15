@@ -6,6 +6,7 @@ import {
     getUserBites,
     getSavedBites,
     getLikedBites,
+    getUserLikedBites,
     followUser,
     unfollowUser,
 } from '../controllers/profile.controller.js';
@@ -24,6 +25,8 @@ router.post('/:username/follow', protect, followUser);
 router.delete('/:username/follow', protect, unfollowUser);
 router.get('/:username', protect, getProfile);
 router.get('/:username/bites', protect, getUserBites);
+router.get('/:username/liked', protect, getUserLikedBites);
+router.get('/:username/likes', protect, getUserLikedBites);
 
 router.patch(
     '/',
