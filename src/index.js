@@ -2,8 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import http from 'http';
-import { initSocket } from './config/socket.js';
 import authRoutes from './routes/auth.route.js';
 import mapsRoutes from './routes/maps.route.js';
 import feedRoutes from './routes/feed.route.js';
@@ -11,7 +9,6 @@ import profileRoutes from './routes/profile.route.js';
 import notificationRoutes from './routes/notification.route.js';
 
 const app = express();
-const server = http.createServer(app);
 
 const allowedOrigins = new Set(
     [
@@ -41,8 +38,6 @@ app.use((req, res, next) => {
     next();
 });
 
-initSocket(server);
-
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
@@ -59,6 +54,6 @@ app.use('/api/notifications', notificationRoutes);
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
+app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });

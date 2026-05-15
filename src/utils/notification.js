@@ -1,5 +1,3 @@
-import { db } from '../db/index.js';
-import { notifications } from '../db/schema.js';
 import { sendPushToUser } from './push.notification.js';
 
 export const createNotificationAndPush = async ({
@@ -13,24 +11,12 @@ export const createNotificationAndPush = async ({
         return null;
     }
 
-    const [notification] = await db
-        .insert(notifications)
-        .values({
-            toUserId,
-            fromUserId,
-            type,
-            biteId,
-            message,
-        })
-        .returning();
-
     try {
         await sendPushToUser({
             userId: toUserId,
             title: 'BiteYo',
             body: message,
             data: {
-                notificationId: notification.id,
                 type,
                 biteId,
                 fromUserId,
@@ -40,5 +26,5 @@ export const createNotificationAndPush = async ({
         console.error('Push notification failed:', error);
     }
 
-    return notification;
+    return null;
 };

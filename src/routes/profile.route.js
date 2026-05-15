@@ -5,6 +5,7 @@ import {
     deleteAccount,
     getUserBites,
     getSavedBites,
+    getLikedBites,
     followUser,
     unfollowUser,
 } from '../controllers/profile.controller.js';
@@ -17,6 +18,7 @@ const router = express.Router();
 
 // ⚠️ route statis harus di atas route dinamis /:username
 router.get('/saved', protect, getSavedBites);
+router.get('/liked', protect, getLikedBites);
 
 router.post('/:username/follow', protect, followUser);
 router.delete('/:username/follow', protect, unfollowUser);

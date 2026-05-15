@@ -1,37 +1,13 @@
 import { db } from '../db/index.js';
 import { bites, users, likes, comments, saved } from '../db/schema.js';
 import { desc, eq, sql, and } from 'drizzle-orm';
-import { getIO } from '../config/socket.js';
-import cloudinary from '../config/cloudinary.js';
 import { createNotificationAndPush } from '../utils/notification.js';
+import { deleteStorageObject } from '../utils/storage.js';
 
 const VIRAL_SCORE_THRESHOLD = 20;
 
 const getViralScoreSql = (viewsCount, likesCount, commentsCount) =>
     sql`(${viewsCount} * 1 + ${likesCount} * 3 + ${commentsCount} * 5)::int`;
-
-const getCloudinaryPublicIdCandidates = (photoUrl) => {
-    if (!photoUrl || !photoUrl.includes('res.cloudinary.com')) {
-        return [];
-    }
-
-    try {
-        const { pathname } = new URL(photoUrl);
-        const decodedPath = decodeURIComponent(pathname);
-        const folderIndex = decodedPath.indexOf('/biteyo/');
-
-        if (folderIndex === -1) {
-            return [];
-        }
-
-        const publicPath = decodedPath.slice(folderIndex + 1);
-        const publicIdWithoutFormat = publicPath.replace(/\.[^/.]+$/, '');
-
-        return [...new Set([publicIdWithoutFormat, publicPath])];
-    } catch {
-        return [];
-    }
-};
 
 const getBiteEngagement = async (biteId) => {
     const [[{ viewsCount }], [{ likesCount }], [{ commentsCount }]] =
@@ -88,11 +64,6 @@ export const recordBiteView = async (req, res) => {
         }
 
         const engagement = await getBiteEngagement(id);
-
-        getIO().emit('bite_engagement_updated', {
-            biteId: id,
-            ...engagement,
-        });
 
         return res.status(200).json({
             message: 'Bite view recorded',
@@ -163,28 +134,6 @@ export const createBite = async (req, res) => {
                 isTrending: false,
             })
             .returning();
-
-        // ambil info user untuk di-emit ke semua client
-        const [userInfo] = await db
-            .select({
-                id: users.id,
-                username: users.username,
-                avatarUrl: users.avatarUrl,
-            })
-            .from(users)
-            .where(eq(users.id, userId));
-
-        // broadcast bite baru ke semua client yang terkoneksi
-        getIO().emit('new_bite', {
-            ...newBite,
-            user: userInfo,
-            viewsCount: 0,
-            likesCount: 0,
-            commentsCount: 0,
-            viralScore: 0,
-            isLiked: false,
-            isSaved: false,
-        });
 
         return res.status(201).json({
             message: 'Bite created successfully',
@@ -361,21 +310,6 @@ export const toggleLikeBite = async (req, res) => {
             await db.delete(likes).where(eq(likes.id, existingLike.id));
             const engagement = await getBiteEngagement(id);
 
-            getIO().emit('bite_unliked', {
-                biteId: id,
-                userId,
-                unlikedByUserId: userId,
-                liked: false,
-                ...engagement,
-            });
-
-            getIO().emit('bite_engagement_updated', {
-                biteId: id,
-                unlikedByUserId: userId,
-                liked: false,
-                ...engagement,
-            });
-
             return res.status(200).json({
                 message: 'Bite unliked',
                 liked: false,
@@ -402,21 +336,6 @@ export const toggleLikeBite = async (req, res) => {
         });
 
         const engagement = await getBiteEngagement(id);
-
-        getIO().emit('bite_liked', {
-            biteId: id,
-            userId,
-            likedByUserId: userId,
-            liked: true,
-            ...engagement,
-        });
-
-        getIO().emit('bite_engagement_updated', {
-            biteId: id,
-            likedByUserId: userId,
-            liked: true,
-            ...engagement,
-        });
 
         return res.status(201).json({
             message: 'Bite liked',
@@ -524,19 +443,6 @@ export const createComment = async (req, res) => {
         });
 
         const engagement = await getBiteEngagement(id);
-
-        getIO().emit('new_comment', {
-            ...comment,
-            user: actor,
-            likesCount: engagement.likesCount,
-            commentsCount: engagement.commentsCount,
-        });
-
-        getIO().emit('bite_engagement_updated', {
-            biteId: id,
-            commentedByUserId: userId,
-            ...engagement,
-        });
 
         return res.status(201).json({
             message: 'Comment created',
@@ -658,16 +564,6 @@ export const updateBite = async (req, res) => {
             .where(eq(bites.id, id))
             .returning();
 
-        // broadcast perubahan bite ke semua client
-        getIO().emit('update_bite', {
-            id: updatedBite.id,
-            foodName: updatedBite.foodName,
-            review: updatedBite.review,
-            rating: updatedBite.rating,
-            category: updatedBite.category,
-            updatedAt: updatedBite.updatedAt,
-        });
-
         return res.status(200).json({
             message: 'Bite updated successfully',
             bite: updatedBite,
@@ -699,35 +595,9 @@ export const deleteBite = async (req, res) => {
         }
 
         const [bite] = existingBite;
-        const publicIdCandidates = getCloudinaryPublicIdCandidates(
-            bite.photoUrl
-        );
-
-        let cloudinaryDeleted = publicIdCandidates.length === 0;
-
-        for (const publicId of publicIdCandidates) {
-            const result = await cloudinary.uploader.destroy(publicId, {
-                invalidate: true,
-                resource_type: 'image',
-            });
-
-            if (result.result === 'ok') {
-                cloudinaryDeleted = true;
-                break;
-            }
-        }
-
-        if (!cloudinaryDeleted) {
-            console.warn('Cloudinary image was not deleted:', {
-                photoUrl: bite.photoUrl,
-                publicIdCandidates,
-            });
-        }
+        await deleteStorageObject(bite.photoUrl);
 
         await db.delete(bites).where(eq(bites.id, id));
-
-        // broadcast penghapusan bite ke semua client
-        getIO().emit('delete_bite', { id });
 
         return res.status(200).json({
             message: 'Bite deleted successfully',

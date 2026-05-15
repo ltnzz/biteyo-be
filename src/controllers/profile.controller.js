@@ -1,8 +1,8 @@
 import { eq, ne, and, desc, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/index.js';
 import { users, bites, follows, likes, comments, saved } from '../db/schema.js';
 import { createNotificationAndPush } from '../utils/notification.js';
-import { getIO } from '../config/socket.js';
 
 const VIRAL_SCORE_THRESHOLD = 20;
 
@@ -228,15 +228,6 @@ export const followUser = async (req, res) => {
             actorUserId: currentUserId,
         });
 
-        getIO().emit('follow_status_updated', {
-            followerId: currentUserId,
-            followerUsername: actor?.username,
-            followingId: targetUser.id,
-            followingUsername: targetUser.username,
-            following: true,
-            ...followStats,
-        });
-
         return res.status(201).json({
             message: 'User followed',
             following: true,
@@ -294,15 +285,6 @@ export const unfollowUser = async (req, res) => {
         const followStats = await getFollowStats({
             targetUserId: targetUser.id,
             actorUserId: currentUserId,
-        });
-
-        getIO().emit('follow_status_updated', {
-            followerId: currentUserId,
-            followerUsername: actor?.username,
-            followingId: targetUser.id,
-            followingUsername: targetUser.username,
-            following: false,
-            ...followStats,
         });
 
         return res.status(200).json({
@@ -485,6 +467,74 @@ export const getSavedBites = async (req, res) => {
         });
     } catch (error) {
         console.error('Error in getSavedBites controller', error);
+        return res.status(500).json({
+            message: 'Internal server error',
+        });
+    }
+};
+
+export const getLikedBites = async (req, res) => {
+    try {
+        const currentUserId = req.user.id;
+        const userLikes = alias(likes, 'user_likes');
+
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const limit = Math.min(parseInt(req.query.limit) || 12, 50);
+        const offset = (page - 1) * limit;
+
+        const likedBites = await db
+            .select({
+                id: bites.id,
+                foodName: bites.foodName,
+                locationName: bites.locationName,
+                locationAddress: bites.locationAddress,
+                latitude: bites.latitude,
+                longitude: bites.longitude,
+                placeId: bites.placeId,
+                review: bites.review,
+                rating: bites.rating,
+                photoUrl: bites.photoUrl,
+                category: bites.category,
+                viewsCount: bites.viewsCount,
+                isTrending: sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`,
+                viralScore: getBiteViralScoreSql(),
+                createdAt: bites.createdAt,
+                likedAt: userLikes.createdAt,
+
+                user: {
+                    id: users.id,
+                    username: users.username,
+                    avatarUrl: users.avatarUrl,
+                },
+
+                likesCount: sql`count(distinct ${likes.id})::int`,
+                commentsCount: sql`count(distinct ${comments.id})::int`,
+                isLiked: sql`true`,
+                isSaved: sql`coalesce(bool_or(${saved.userId} = ${currentUserId}), false)`,
+            })
+            .from(userLikes)
+            .innerJoin(bites, eq(userLikes.biteId, bites.id))
+            .leftJoin(users, eq(bites.userId, users.id))
+            .leftJoin(likes, eq(likes.biteId, bites.id))
+            .leftJoin(comments, eq(comments.biteId, bites.id))
+            .leftJoin(saved, eq(saved.biteId, bites.id))
+            .where(eq(userLikes.userId, currentUserId))
+            .groupBy(bites.id, users.id, userLikes.id)
+            .orderBy(desc(userLikes.createdAt))
+            .limit(limit)
+            .offset(offset);
+
+        return res.status(200).json({
+            message: 'success',
+            data: likedBites,
+            pagination: {
+                page,
+                limit,
+                hasMore: likedBites.length === limit,
+            },
+        });
+    } catch (error) {
+        console.error('Error in getLikedBites controller', error);
         return res.status(500).json({
             message: 'Internal server error',
         });
