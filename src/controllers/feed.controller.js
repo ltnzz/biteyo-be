@@ -430,6 +430,50 @@ export const toggleLikeBite = async (req, res) => {
     }
 };
 
+export const toggleSaveBite = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+
+        const [bite] = await db
+            .select({ id: bites.id })
+            .from(bites)
+            .where(eq(bites.id, id));
+
+        if (!bite) {
+            return res.status(404).json({ message: 'Bite not found' });
+        }
+
+        const [existingSavedBite] = await db
+            .select({ id: saved.id })
+            .from(saved)
+            .where(and(eq(saved.userId, userId), eq(saved.biteId, id)));
+
+        if (existingSavedBite) {
+            await db.delete(saved).where(eq(saved.id, existingSavedBite.id));
+
+            return res.status(200).json({
+                message: 'Bite unsaved',
+                saved: false,
+            });
+        }
+
+        const [savedBite] = await db
+            .insert(saved)
+            .values({ userId, biteId: id })
+            .returning();
+
+        return res.status(201).json({
+            message: 'Bite saved',
+            saved: true,
+            savedBite,
+        });
+    } catch (error) {
+        console.error('Toggle save error:', error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+};
+
 export const createComment = async (req, res) => {
     try {
         const { id } = req.params;

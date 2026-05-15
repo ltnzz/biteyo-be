@@ -6,6 +6,7 @@ import {
     updateBite,
     deleteBite,
     toggleLikeBite,
+    toggleSaveBite,
     createComment,
     getBiteComments,
     recordBiteView,
@@ -36,6 +37,7 @@ router.patch('/bites/:id', protect, validate(updateBiteSchema), updateBite);
 router.delete('/bites/:id', protect, deleteBite);
 router.post('/bites/:id/view', protect, recordBiteView);
 router.post('/bites/:id/like', protect, toggleLikeBite);
+router.post('/bites/:id/save', protect, toggleSaveBite);
 router.get('/bites/:id/comments', protect, getBiteComments);
 router.post('/bites/:id/comments', protect, createComment);
 
