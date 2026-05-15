@@ -2,26 +2,30 @@ import admin from 'firebase-admin';
 import fs from 'fs';
 
 const parseServiceAccount = () => {
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
-        return JSON.parse(
-            fs.readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8')
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+        const serviceAccount = JSON.parse(
+            process.env.FIREBASE_SERVICE_ACCOUNT_KEY
         );
+
+        if (serviceAccount.private_key) {
+            serviceAccount.private_key = serviceAccount.private_key.replace(
+                /\\n/g,
+                '\n'
+            );
+        }
+
+        return serviceAccount;
     }
 
-    if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    const serviceAccountPath =
+        process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
+        './firebase-service-account.json';
+
+    if (!fs.existsSync(serviceAccountPath)) {
         return null;
     }
 
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-
-    if (serviceAccount.private_key) {
-        serviceAccount.private_key = serviceAccount.private_key.replace(
-            /\\n/g,
-            '\n'
-        );
-    }
-
-    return serviceAccount;
+    return JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
 };
 
 let messaging = null;
