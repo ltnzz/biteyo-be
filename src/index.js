@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import swaggerUi from 'swagger-ui-express';
 import authRoutes from './routes/auth.route.js';
 import mapsRoutes from './routes/maps.route.js';
 import feedRoutes from './routes/feed.route.js';
@@ -51,7 +50,35 @@ app.get('/', (req, res) => {
 app.get('/api/docs.json', (req, res) => {
     res.json(openApiDocument);
 });
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
+app.get(['/api/docs', '/api/docs/'], (req, res) => {
+    res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Biteyo API Docs</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = () => {
+            window.ui = SwaggerUIBundle({
+                url: '/api/docs.json',
+                dom_id: '#swagger-ui',
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset,
+                ],
+                layout: 'StandaloneLayout',
+            });
+        };
+    </script>
+</body>
+</html>`);
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/maps', mapsRoutes);
