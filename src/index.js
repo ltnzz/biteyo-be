@@ -50,6 +50,38 @@ app.get('/', (req, res) => {
 app.get('/api/docs.json', (req, res) => {
     res.json(openApiDocument);
 });
+app.get('/api/docs/:asset', (req, res, next) => {
+    const cdnBase = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5';
+    const assetMap = {
+        'swagger-ui.css': `${cdnBase}/swagger-ui.css`,
+        'swagger-ui-bundle.js': `${cdnBase}/swagger-ui-bundle.js`,
+        'swagger-ui-standalone-preset.js': `${cdnBase}/swagger-ui-standalone-preset.js`,
+        'favicon-16x16.png': `${cdnBase}/favicon-16x16.png`,
+        'favicon-32x32.png': `${cdnBase}/favicon-32x32.png`,
+    };
+
+    if (req.params.asset === 'swagger-ui-init.js') {
+        return res.type('application/javascript').send(`
+window.onload = () => {
+    window.ui = SwaggerUIBundle({
+        url: '/api/docs.json',
+        dom_id: '#swagger-ui',
+        presets: [
+            SwaggerUIBundle.presets.apis,
+            SwaggerUIStandalonePreset,
+        ],
+        layout: 'StandaloneLayout',
+    });
+};
+`);
+    }
+
+    if (assetMap[req.params.asset]) {
+        return res.redirect(302, assetMap[req.params.asset]);
+    }
+
+    return next();
+});
 app.get(['/api/docs', '/api/docs/'], (req, res) => {
     res.type('html').send(`<!doctype html>
 <html lang="en">
