@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BITE_CATEGORIES } from '../../db/schema.js';
 
 export const createBiteSchema = z.object({
     foodName: z
@@ -15,14 +16,7 @@ export const createBiteSchema = z.object({
         .number()
         .min(1, 'Minimum rating is 1')
         .max(5, 'Maximum rating is 5'),
-    category: z.enum([
-        'street_food',
-        'cafe',
-        'fine_dining',
-        'dessert',
-        'viral',
-        'hidden_gems',
-    ]),
+    category: z.enum(BITE_CATEGORIES),
 });
 
 export const updateBiteSchema = z.object({
@@ -40,12 +34,5 @@ export const updateBiteSchema = z.object({
         .min(1)
         .max(5)
         .optional(),
-    category: z.enum([
-        'street_food',
-        'cafe',
-        'fine_dining',
-        'dessert',
-        'viral',
-        'hidden_gems',
-    ]).optional(),
+    category: z.enum(BITE_CATEGORIES).optional(),
 });

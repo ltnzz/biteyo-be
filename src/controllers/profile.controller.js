@@ -7,7 +7,7 @@ import { createNotificationAndPush } from '../utils/notification.js';
 const VIRAL_SCORE_THRESHOLD = 20;
 
 const getBiteViralScoreSql = () =>
-    sql`(${bites.viewsCount} * 1 + count(distinct ${likes.id}) * 3 + count(distinct ${comments.id}) * 5)::int`;
+    sql`(${bites.viewsCount} * 1 + ${bites.likesCount} * 3 + ${bites.commentsCount} * 5)::int`;
 
 const getFollowStats = async ({ targetUserId, actorUserId }) => {
     const [[{ targetFollowersCount }], [{ actorFollowingCount }]] =
@@ -374,8 +374,8 @@ export const getUserBites = async (req, res) => {
                     avatarUrl: users.avatarUrl,
                 },
 
-                likesCount: sql`count(distinct ${likes.id})::int`,
-                commentsCount: sql`count(distinct ${comments.id})::int`,
+                likesCount: bites.likesCount,
+                commentsCount: bites.commentsCount,
                 isLiked: sql`coalesce(bool_or(${likes.userId} = ${currentUserId}), false)`,
                 isSaved: sql`coalesce(bool_or(${saved.userId} = ${currentUserId}), false)`,
             })
@@ -440,8 +440,8 @@ export const getSavedBites = async (req, res) => {
                     avatarUrl: users.avatarUrl,
                 },
 
-                likesCount: sql`count(distinct ${likes.id})::int`,
-                commentsCount: sql`count(distinct ${comments.id})::int`,
+                likesCount: bites.likesCount,
+                commentsCount: bites.commentsCount,
                 isLiked: sql`coalesce(bool_or(${likes.userId} = ${currentUserId}), false)`,
                 isSaved: sql`true`,
             })
@@ -502,8 +502,8 @@ const getLikedBitesByUserId = async ({ targetUserId, currentUserId, page, limit 
                 avatarUrl: users.avatarUrl,
             },
 
-            likesCount: sql`count(distinct ${likes.id})::int`,
-            commentsCount: sql`count(distinct ${comments.id})::int`,
+            likesCount: bites.likesCount,
+            commentsCount: bites.commentsCount,
             isLiked: sql`coalesce(bool_or(${likes.userId} = ${currentUserId}), false)`,
             isSaved: sql`coalesce(bool_or(${saved.userId} = ${currentUserId}), false)`,
         })

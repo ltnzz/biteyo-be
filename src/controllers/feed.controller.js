@@ -1,6 +1,13 @@
 import { db } from '../db/index.js';
-import { bites, users, likes, comments, saved } from '../db/schema.js';
-import { desc, eq, sql, and } from 'drizzle-orm';
+import {
+    BITE_CATEGORIES,
+    bites,
+    users,
+    likes,
+    comments,
+    saved,
+} from '../db/schema.js';
+import { desc, eq, sql, and, ilike, or } from 'drizzle-orm';
 import { createNotificationAndPush } from '../utils/notification.js';
 import { deleteStorageObject } from '../utils/storage.js';
 
@@ -35,6 +42,8 @@ const getBiteEngagement = async (biteId) => {
     await db
         .update(bites)
         .set({
+            likesCount,
+            commentsCount,
             isTrending,
             updatedAt: new Date(),
         })
@@ -75,20 +84,135 @@ export const recordBiteView = async (req, res) => {
     }
 };
 
-const getBiteCountsSql = () => ({
-    likesCount: sql`count(distinct ${likes.id})::int`,
-    commentsCount: sql`count(distinct ${comments.id})::int`,
-});
-
 const getBiteViralScoreSql = () =>
     getViralScoreSql(
         bites.viewsCount,
-        sql`count(distinct ${likes.id})`,
-        sql`count(distinct ${comments.id})`
+        bites.likesCount,
+        bites.commentsCount
     );
 
 const getTrendingStatusSql = () =>
     sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`;
+
+const categoryLabels = {
+    street_food: 'Street Food',
+    cafe: 'Cafe',
+    fine_dining: 'Fine Dining',
+    dessert: 'Dessert',
+    viral: 'Viral',
+    hidden_gems: 'Hidden Gems',
+};
+
+const getBiteList = async (req, res, options = {}) => {
+    const userId = req.user?.id;
+
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const offset = (page - 1) * limit;
+    const sort = options.sort || req.query.sort;
+    const category = options.category || req.query.category;
+    const search = options.search ?? req.query.search ?? req.query.q;
+    const trendingOnly =
+        options.trendingOnly || req.query.trending === 'true';
+
+    if (category && !BITE_CATEGORIES.includes(category)) {
+        return res.status(400).json({
+            message: 'Invalid category',
+            categories: BITE_CATEGORIES,
+        });
+    }
+
+    const filters = [];
+
+    if (category) {
+        filters.push(eq(bites.category, category));
+    }
+
+    if (trendingOnly) {
+        filters.push(getTrendingStatusSql());
+    }
+
+    if (search?.trim()) {
+        const searchPattern = `%${search.trim()}%`;
+
+        filters.push(
+            or(
+                ilike(bites.foodName, searchPattern),
+                ilike(bites.locationName, searchPattern),
+                ilike(bites.review, searchPattern)
+            )
+        );
+    }
+
+    let query = db
+        .select({
+            id: bites.id,
+            foodName: bites.foodName,
+            locationName: bites.locationName,
+            locationAddress: bites.locationAddress,
+            latitude: bites.latitude,
+            longitude: bites.longitude,
+            placeId: bites.placeId,
+            review: bites.review,
+            rating: bites.rating,
+            photoUrl: bites.photoUrl,
+            category: bites.category,
+            viewsCount: bites.viewsCount,
+            isTrending: getTrendingStatusSql(),
+            viralScore: getBiteViralScoreSql(),
+            createdAt: bites.createdAt,
+
+            user: {
+                id: users.id,
+                username: users.username,
+                avatarUrl: users.avatarUrl,
+            },
+
+            likesCount: bites.likesCount,
+            commentsCount: bites.commentsCount,
+            isLiked: sql`coalesce(bool_or(${likes.userId} = ${userId}), false)`,
+            isSaved: sql`coalesce(bool_or(${saved.userId} = ${userId}), false)`,
+        })
+        .from(bites)
+        .leftJoin(users, eq(bites.userId, users.id))
+        .leftJoin(likes, eq(likes.biteId, bites.id))
+        .leftJoin(comments, eq(comments.biteId, bites.id))
+        .leftJoin(saved, eq(saved.biteId, bites.id));
+
+    if (filters.length > 0) {
+        query = query.where(and(...filters));
+    }
+
+    query = query.groupBy(bites.id, users.id);
+
+    const feeds = await (
+        sort === 'viral' || sort === 'trending' || trendingOnly
+            ? query.orderBy(desc(getBiteViralScoreSql()), desc(bites.createdAt))
+            : query.orderBy(desc(bites.createdAt))
+    )
+        .limit(limit)
+        .offset(offset);
+
+    return res.status(200).json({
+        message: 'success',
+        data: feeds,
+        pagination: {
+            page,
+            limit,
+            hasMore: feeds.length === limit,
+        },
+    });
+};
+
+export const getBiteCategories = async (req, res) => {
+    return res.status(200).json({
+        message: 'success',
+        data: BITE_CATEGORIES.map((value) => ({
+            value,
+            label: categoryLabels[value],
+        })),
+    });
+};
 
 export const createBite = async (req, res) => {
     try {
@@ -149,74 +273,54 @@ export const createBite = async (req, res) => {
 
 export const getBite = async (req, res) => {
     try {
-        const userId = req.user?.id;
+        return getBiteList(req, res);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            message: 'internal server error',
+        });
+    }
+};
 
-        const page = Math.max(parseInt(req.query.page) || 1, 1);
-        const limit = Math.min(parseInt(req.query.limit) || 10, 50);
-        const offset = (page - 1) * limit;
-        const sort = req.query.sort;
-        const counts = getBiteCountsSql();
+export const getTrendingBites = async (req, res) => {
+    try {
+        return getBiteList(req, res, {
+            sort: 'trending',
+            trendingOnly: true,
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            message: 'internal server error',
+        });
+    }
+};
 
-        const query = db
-            .select({
-                id: bites.id,
-                foodName: bites.foodName,
-                locationName: bites.locationName,
-                locationAddress: bites.locationAddress,
-                latitude: bites.latitude,
-                longitude: bites.longitude,
-                placeId: bites.placeId,
-                review: bites.review,
-                rating: bites.rating,
-                photoUrl: bites.photoUrl,
-                category: bites.category,
-                viewsCount: bites.viewsCount,
-                isTrending: getTrendingStatusSql(),
-                viralScore: getBiteViralScoreSql(),
-                createdAt: bites.createdAt,
+export const getBitesByCategory = async (req, res) => {
+    try {
+        return getBiteList(req, res, {
+            category: req.params.category,
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            message: 'internal server error',
+        });
+    }
+};
 
-                user: {
-                    id: users.id,
-                    username: users.username,
-                    avatarUrl: users.avatarUrl,
-                },
+export const searchBites = async (req, res) => {
+    try {
+        const search = req.query.q || req.query.search;
 
-                // total likes & comments sebagai number (bukan string)
-                likesCount: counts.likesCount,
-                commentsCount: counts.commentsCount,
+        if (!search?.trim()) {
+            return res.status(400).json({
+                message: 'Search query is required',
+            });
+        }
 
-                // apakah current user sudah like bite ini
-                isLiked: sql`coalesce(bool_or(${likes.userId} = ${userId}), false)`,
-
-                // apakah current user sudah save bite ini
-                isSaved: sql`coalesce(bool_or(${saved.userId} = ${userId}), false)`,
-            })
-            .from(bites)
-            .leftJoin(users, eq(bites.userId, users.id))
-            .leftJoin(likes, eq(likes.biteId, bites.id))
-            .leftJoin(comments, eq(comments.biteId, bites.id))
-            .leftJoin(saved, eq(saved.biteId, bites.id))
-            .groupBy(bites.id, users.id);
-
-        const feeds = await (
-            sort === 'viral' || sort === 'trending'
-                ? query.orderBy(
-                      desc(getBiteViralScoreSql()),
-                      desc(bites.createdAt)
-                  )
-                : query.orderBy(desc(bites.createdAt))
-        )
-            .limit(limit)
-            .offset(offset);
-
-        res.status(200).json({
-            message: 'success',
-            data: feeds,
-            pagination: {
-                page,
-                limit,
-                hasMore: feeds.length === limit,
-            },
+        return getBiteList(req, res, {
+            search,
         });
     } catch (err) {
         console.error(err);
@@ -230,8 +334,6 @@ export const getBiteById = async (req, res) => {
     try {
         const { id } = req.params;
         const userId = req.user.id;
-        const counts = getBiteCountsSql();
-
         const [bite] = await db
             .select({
                 id: bites.id,
@@ -256,8 +358,8 @@ export const getBiteById = async (req, res) => {
                     avatarUrl: users.avatarUrl,
                 },
 
-                likesCount: counts.likesCount,
-                commentsCount: counts.commentsCount,
+                likesCount: bites.likesCount,
+                commentsCount: bites.commentsCount,
                 isLiked: sql`coalesce(bool_or(${likes.userId} = ${userId}), false)`,
                 isSaved: sql`coalesce(bool_or(${saved.userId} = ${userId}), false)`,
             })

@@ -11,14 +11,16 @@ import {
     uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
-export const categoryEnum = pgEnum('category', [
+export const BITE_CATEGORIES = [
     'street_food',
     'cafe',
     'fine_dining',
     'dessert',
     'viral',
     'hidden_gems',
-]);
+];
+
+export const categoryEnum = pgEnum('category', BITE_CATEGORIES);
 
 export const notifTypeEnum = pgEnum('notif_type', [
     'like',
@@ -70,6 +72,8 @@ export const bites = pgTable('bites', {
     photoUrl: text('photo_url').notNull(),
     category: categoryEnum('category').notNull(),
     viewsCount: integer('views_count').default(0).notNull(),
+    likesCount: integer('likes_count').default(0).notNull(),
+    commentsCount: integer('comments_count').default(0).notNull(),
     isTrending: boolean('is_trending').default(false),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),

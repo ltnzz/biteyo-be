@@ -2,11 +2,13 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import swaggerUi from 'swagger-ui-express';
 import authRoutes from './routes/auth.route.js';
 import mapsRoutes from './routes/maps.route.js';
 import feedRoutes from './routes/feed.route.js';
 import profileRoutes from './routes/profile.route.js';
 import notificationRoutes from './routes/notification.route.js';
+import { openApiDocument } from './docs/openapi.js';
 
 const app = express();
 
@@ -18,6 +20,11 @@ const allowedOrigins = new Set(
         ...(process.env.CLIENT_URLS?.split(',') || []),
     ].filter(Boolean)
 );
+
+app.use((req, res, next) => {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    next();
+});
 
 app.use(
     cors({
@@ -33,11 +40,6 @@ app.use(
     })
 );
 
-app.use((req, res, next) => {
-    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-    next();
-});
-
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
@@ -45,6 +47,11 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/', (req, res) => {
     res.send('API running');
 });
+
+app.get('/api/docs.json', (req, res) => {
+    res.json(openApiDocument);
+});
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/maps', mapsRoutes);

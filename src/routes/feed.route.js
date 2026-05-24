@@ -5,6 +5,10 @@ import {
     getBiteById,
     updateBite,
     deleteBite,
+    getBiteCategories,
+    getBitesByCategory,
+    getTrendingBites,
+    searchBites,
     toggleLikeBite,
     toggleSaveBite,
     createComment,
@@ -21,7 +25,11 @@ import {
 
 const router = express.Router();
 
+router.get('/categories', protect, getBiteCategories);
 router.get('/bites', protect, getBite);
+router.get('/bites/search', protect, searchBites);
+router.get('/bites/trending', protect, getTrendingBites);
+router.get('/bites/category/:category', protect, getBitesByCategory);
 router.post(
     '/bites',
     protect,
