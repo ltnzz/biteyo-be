@@ -23,6 +23,21 @@ Biteyo Backend adalah REST API untuk aplikasi sosial berbagi rekomendasi makanan
 - Pencarian lokasi lewat Maps endpoint.
 - Dokumentasi OpenAPI tersedia di `/api/docs`.
 
+## Fitur Teknis
+
+- **Auth middleware**: route privat memakai middleware `protect` untuk membaca JWT dari cookie atau header `Authorization: Bearer <token>`.
+- **Request validation**: body request divalidasi dengan Zod lewat middleware `validate`, misalnya untuk auth, create bite, update bite, dan update profile.
+- **Rate limiter**: endpoint pencarian lokasi memakai `express-rate-limit` melalui `locationLimiter` agar request Maps tidak terlalu agresif.
+- **Upload middleware**: avatar, banner, dan foto bite diproses lewat Multer, lalu dioptimasi sebelum dikirim ke Supabase Storage.
+- **Storage cleanup**: saat bite dihapus, file foto terkait ikut dihapus dari Supabase Storage.
+- **OpenAPI docs**: dokumentasi API tersedia di `/api/docs`, dengan JSON mentah di `/api/docs.json`.
+- **CORS multi-origin**: origin frontend utama dan tambahan bisa diatur lewat `CLIENT_URL` dan `CLIENT_URLS`.
+- **Push notification**: FCM token user disimpan, lalu dipakai untuk mengirim push notification.
+- **Database notification triggers**: notifikasi like, comment, dan follow dibuat dari trigger SQL.
+- **Mention parser**: backend membaca `@username` dari review bite dan komentar, menyimpan relasi mention, lalu membuat notifikasi mention.
+- **Trending score**: bite trending dihitung dari kombinasi view, like, dan komentar.
+- **Swagger UI asset redirect**: asset Swagger UI diarahkan ke CDN jsDelivr agar dokumentasi bisa dibuka langsung dari backend.
+
 ## Tech Stack
 
 - Node.js dengan ES Modules.
@@ -141,6 +156,14 @@ Migration terbaru menambahkan fitur mention:
 Pastikan migration dijalankan ke database sebelum fitur mention dipakai di production.
 
 ## Endpoint Utama
+
+Total API utama: **36 endpoint**.
+
+- Auth: 7 endpoint
+- Feed: 14 endpoint
+- Profile: 10 endpoint
+- Notifications: 4 endpoint
+- Maps: 1 endpoint
 
 Auth:
 
