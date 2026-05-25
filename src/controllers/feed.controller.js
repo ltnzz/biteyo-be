@@ -707,9 +707,32 @@ export const updateBite = async (req, res) => {
             .where(eq(bites.id, id))
             .returning();
 
+        let mentionedUsers = [];
+
+        if (review !== undefined) {
+            const [actor] = await db
+                .select({
+                    username: users.username,
+                })
+                .from(users)
+                .where(eq(users.id, userId));
+
+            mentionedUsers = await safeCreateMentionsFromText({
+                text: review,
+                sourceType: 'bite',
+                sourceId: updatedBite.id,
+                biteId: updatedBite.id,
+                mentionedByUserId: userId,
+                actorUsername: actor?.username,
+            });
+        }
+
         return res.status(200).json({
             message: 'Bite updated successfully',
-            bite: updatedBite,
+            bite: {
+                ...updatedBite,
+                mentions: mentionedUsers,
+            },
         });
     } catch (error) {
         console.error('Update bite error:', error);
