@@ -1,4 +1,4 @@
-import { eq, ne, and, desc, sql } from 'drizzle-orm';
+import { eq, ne, and, desc, ilike, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/index.js';
 import { users, bites, follows, likes, comments, saved } from '../db/schema.js';
