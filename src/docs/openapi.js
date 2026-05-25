@@ -123,7 +123,13 @@ export const openApiDocument = {
                     id: { type: 'string', format: 'uuid' },
                     type: {
                         type: 'string',
-                        enum: ['like', 'comment', 'follow', 'trending'],
+                        enum: [
+                            'like',
+                            'comment',
+                            'follow',
+                            'trending',
+                            'mention',
+                        ],
                     },
                     biteId: { type: 'string', format: 'uuid', nullable: true },
                     message: { type: 'string', nullable: true },

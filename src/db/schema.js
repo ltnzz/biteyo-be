@@ -27,6 +27,7 @@ export const notifTypeEnum = pgEnum('notif_type', [
     'comment',
     'follow',
     'trending',
+    'mention',
 ]);
 
 export const users = pgTable('users', {
@@ -124,6 +125,69 @@ export const saved = pgTable('saved', {
         }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const biteMentions = pgTable(
+    'bite_mentions',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        biteId: uuid('bite_id')
+            .notNull()
+            .references(() => bites.id, {
+                onDelete: 'cascade',
+            }),
+        mentionedUserId: uuid('mentioned_user_id')
+            .notNull()
+            .references(() => users.id, {
+                onDelete: 'cascade',
+            }),
+        mentionedByUserId: uuid('mentioned_by_user_id')
+            .notNull()
+            .references(() => users.id, {
+                onDelete: 'cascade',
+            }),
+        createdAt: timestamp('created_at').defaultNow().notNull(),
+    },
+    (table) => [
+        uniqueIndex('bite_mentions_bite_user_unique').on(
+            table.biteId,
+            table.mentionedUserId
+        ),
+    ]
+);
+
+export const commentMentions = pgTable(
+    'comment_mentions',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        commentId: uuid('comment_id')
+            .notNull()
+            .references(() => comments.id, {
+                onDelete: 'cascade',
+            }),
+        biteId: uuid('bite_id')
+            .notNull()
+            .references(() => bites.id, {
+                onDelete: 'cascade',
+            }),
+        mentionedUserId: uuid('mentioned_user_id')
+            .notNull()
+            .references(() => users.id, {
+                onDelete: 'cascade',
+            }),
+        mentionedByUserId: uuid('mentioned_by_user_id')
+            .notNull()
+            .references(() => users.id, {
+                onDelete: 'cascade',
+            }),
+        createdAt: timestamp('created_at').defaultNow().notNull(),
+    },
+    (table) => [
+        uniqueIndex('comment_mentions_comment_user_unique').on(
+            table.commentId,
+            table.mentionedUserId
+        ),
+    ]
+);
 
 export const notifications = pgTable('notifications', {
     id: uuid('id').primaryKey().defaultRandom(),

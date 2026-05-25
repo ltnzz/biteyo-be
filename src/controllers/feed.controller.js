@@ -10,11 +10,21 @@ import {
 import { desc, eq, sql, and, ilike, or } from 'drizzle-orm';
 import { createNotificationAndPush } from '../utils/notification.js';
 import { deleteStorageObject } from '../utils/storage.js';
+import { createMentionsFromText } from '../utils/mention.js';
 
 const VIRAL_SCORE_THRESHOLD = 20;
 
 const getViralScoreSql = (viewsCount, likesCount, commentsCount) =>
     sql`(${viewsCount} * 1 + ${likesCount} * 3 + ${commentsCount} * 5)::int`;
+
+const safeCreateMentionsFromText = async (options) => {
+    try {
+        return await createMentionsFromText(options);
+    } catch (error) {
+        console.error('Create mentions error:', error);
+        return [];
+    }
+};
 
 const getBiteEngagement = async (biteId) => {
     const [[{ viewsCount }], [{ likesCount }], [{ commentsCount }]] =
@@ -259,9 +269,28 @@ export const createBite = async (req, res) => {
             })
             .returning();
 
+        const [actor] = await db
+            .select({
+                username: users.username,
+            })
+            .from(users)
+            .where(eq(users.id, userId));
+
+        const mentionedUsers = await safeCreateMentionsFromText({
+            text: review,
+            sourceType: 'bite',
+            sourceId: newBite.id,
+            biteId: newBite.id,
+            mentionedByUserId: userId,
+            actorUsername: actor?.username,
+        });
+
         return res.status(201).json({
             message: 'Bite created successfully',
-            bite: newBite,
+            bite: {
+                ...newBite,
+                mentions: mentionedUsers,
+            },
         });
     } catch (error) {
         console.error('Create bite error:', error);
@@ -546,11 +575,23 @@ export const createComment = async (req, res) => {
 
         const engagement = await getBiteEngagement(id);
 
+        const mentionedUsers = await safeCreateMentionsFromText({
+            text: content,
+            sourceType: 'comment',
+            sourceId: comment.id,
+            biteId: id,
+            mentionedByUserId: userId,
+            actorUsername: actor?.username,
+            biteFoodName: bite.foodName,
+            excludedUserIds: [bite.userId],
+        });
+
         return res.status(201).json({
             message: 'Comment created',
             comment: {
                 ...comment,
                 user: actor,
+                mentions: mentionedUsers,
             },
             ...engagement,
         });
