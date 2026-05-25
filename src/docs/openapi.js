@@ -58,15 +58,36 @@ export const openApiDocument = {
                     updatedAt: { type: 'string', format: 'date-time' },
                 },
             },
+            MentionSuggestion: {
+                type: 'object',
+                properties: {
+                    id: { type: 'string', format: 'uuid' },
+                    username: { type: 'string', example: 'biteyo_user' },
+                    avatarUrl: { type: 'string', nullable: true },
+                    bio: { type: 'string', nullable: true },
+                    mention: { type: 'string', example: '@biteyo_user' },
+                },
+            },
             Bite: {
                 type: 'object',
                 properties: {
                     id: { type: 'string', format: 'uuid' },
                     foodName: { type: 'string', example: 'Nasi Goreng' },
-                    locationName: { type: 'string', example: 'Warung Makan Enak' },
+                    locationName: {
+                        type: 'string',
+                        example: 'Warung Makan Enak',
+                    },
                     locationAddress: { type: 'string', nullable: true },
-                    latitude: { type: 'string', nullable: true, example: '-6.20000000' },
-                    longitude: { type: 'string', nullable: true, example: '106.81666600' },
+                    latitude: {
+                        type: 'string',
+                        nullable: true,
+                        example: '-6.20000000',
+                    },
+                    longitude: {
+                        type: 'string',
+                        nullable: true,
+                        example: '106.81666600',
+                    },
                     placeId: { type: 'string', nullable: true },
                     review: { type: 'string', nullable: true },
                     rating: { type: 'integer', minimum: 1, maximum: 5 },
@@ -147,7 +168,12 @@ export const openApiDocument = {
             Limit: {
                 name: 'limit',
                 in: 'query',
-                schema: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
+                schema: {
+                    type: 'integer',
+                    minimum: 1,
+                    maximum: 50,
+                    default: 10,
+                },
             },
         },
         responses: {
@@ -197,11 +223,24 @@ export const openApiDocument = {
                         'application/json': {
                             schema: {
                                 type: 'object',
-                                required: ['username', 'email', 'password', 'confirm_password'],
+                                required: [
+                                    'username',
+                                    'email',
+                                    'password',
+                                    'confirm_password',
+                                ],
                                 properties: {
-                                    username: { type: 'string', minLength: 3, maxLength: 30 },
+                                    username: {
+                                        type: 'string',
+                                        minLength: 3,
+                                        maxLength: 30,
+                                    },
                                     email: { type: 'string', format: 'email' },
-                                    password: { type: 'string', minLength: 8, maxLength: 64 },
+                                    password: {
+                                        type: 'string',
+                                        minLength: 8,
+                                        maxLength: 64,
+                                    },
                                     confirm_password: { type: 'string' },
                                 },
                             },
@@ -311,7 +350,11 @@ export const openApiDocument = {
                                 type: 'object',
                                 required: ['password', 'confirm_password'],
                                 properties: {
-                                    password: { type: 'string', minLength: 8, maxLength: 64 },
+                                    password: {
+                                        type: 'string',
+                                        minLength: 8,
+                                        maxLength: 64,
+                                    },
                                     confirm_password: { type: 'string' },
                                 },
                             },
@@ -367,7 +410,10 @@ export const openApiDocument = {
                     {
                         name: 'sort',
                         in: 'query',
-                        schema: { type: 'string', enum: ['latest', 'trending', 'viral'] },
+                        schema: {
+                            type: 'string',
+                            enum: ['latest', 'trending', 'viral'],
+                        },
                     },
                     {
                         name: 'category',
@@ -382,7 +428,8 @@ export const openApiDocument = {
                     {
                         name: 'q',
                         in: 'query',
-                        description: 'Search food_name, location_name, or review.',
+                        description:
+                            'Search food_name, location_name, or review.',
                         schema: { type: 'string' },
                     },
                     {
@@ -403,9 +450,13 @@ export const openApiDocument = {
                                         message: { type: 'string' },
                                         data: {
                                             type: 'array',
-                                            items: { $ref: '#/components/schemas/Bite' },
+                                            items: {
+                                                $ref: '#/components/schemas/Bite',
+                                            },
                                         },
-                                        pagination: { $ref: '#/components/schemas/Pagination' },
+                                        pagination: {
+                                            $ref: '#/components/schemas/Pagination',
+                                        },
                                     },
                                 },
                             },
@@ -424,17 +475,40 @@ export const openApiDocument = {
                         'multipart/form-data': {
                             schema: {
                                 type: 'object',
-                                required: ['foodName', 'locationName', 'rating', 'category', 'photo'],
+                                required: [
+                                    'foodName',
+                                    'locationName',
+                                    'rating',
+                                    'category',
+                                    'photo',
+                                ],
                                 properties: {
-                                    foodName: { type: 'string', minLength: 2, maxLength: 64 },
-                                    locationName: { type: 'string', minLength: 2, maxLength: 255 },
-                                    locationAddress: { type: 'string', maxLength: 500 },
+                                    foodName: {
+                                        type: 'string',
+                                        minLength: 2,
+                                        maxLength: 64,
+                                    },
+                                    locationName: {
+                                        type: 'string',
+                                        minLength: 2,
+                                        maxLength: 255,
+                                    },
+                                    locationAddress: {
+                                        type: 'string',
+                                        maxLength: 500,
+                                    },
                                     latitude: { type: 'number' },
                                     longitude: { type: 'number' },
                                     placeId: { type: 'string' },
                                     review: { type: 'string', maxLength: 1000 },
-                                    rating: { type: 'integer', minimum: 1, maximum: 5 },
-                                    category: { $ref: '#/components/schemas/BiteCategory' },
+                                    rating: {
+                                        type: 'integer',
+                                        minimum: 1,
+                                        maximum: 5,
+                                    },
+                                    category: {
+                                        $ref: '#/components/schemas/BiteCategory',
+                                    },
                                     photo: { type: 'string', format: 'binary' },
                                     image: { type: 'string', format: 'binary' },
                                 },
@@ -553,10 +627,20 @@ export const openApiDocument = {
                             schema: {
                                 type: 'object',
                                 properties: {
-                                    foodName: { type: 'string', minLength: 2, maxLength: 64 },
+                                    foodName: {
+                                        type: 'string',
+                                        minLength: 2,
+                                        maxLength: 64,
+                                    },
                                     review: { type: 'string', maxLength: 1000 },
-                                    rating: { type: 'integer', minimum: 1, maximum: 5 },
-                                    category: { $ref: '#/components/schemas/BiteCategory' },
+                                    rating: {
+                                        type: 'integer',
+                                        minimum: 1,
+                                        maximum: 5,
+                                    },
+                                    category: {
+                                        $ref: '#/components/schemas/BiteCategory',
+                                    },
                                 },
                             },
                         },
@@ -698,6 +782,60 @@ export const openApiDocument = {
                     201: { description: 'Comment created' },
                     400: { description: 'Comment is required' },
                     404: { $ref: '#/components/responses/NotFound' },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                },
+            },
+        },
+        '/api/profile/mentions': {
+            get: {
+                tags: ['Profile'],
+                summary: 'List users for mention dropdowns',
+                description:
+                    'Returns users that can be mentioned in bite reviews or comments. The q value may be plain text, @username text, or the current editor text containing an @mention fragment.',
+                security: [{ bearerAuth: [] }],
+                parameters: [
+                    {
+                        name: 'q',
+                        in: 'query',
+                        schema: { type: 'string', example: '@bit' },
+                    },
+                    {
+                        name: 'search',
+                        in: 'query',
+                        description: 'Alias for q.',
+                        schema: { type: 'string' },
+                    },
+                    {
+                        name: 'limit',
+                        in: 'query',
+                        schema: {
+                            type: 'integer',
+                            minimum: 1,
+                            maximum: 20,
+                            default: 8,
+                        },
+                    },
+                ],
+                responses: {
+                    200: {
+                        description: 'Mention suggestion list',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        message: { type: 'string' },
+                                        data: {
+                                            type: 'array',
+                                            items: {
+                                                $ref: '#/components/schemas/MentionSuggestion',
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
                     401: { $ref: '#/components/responses/Unauthorized' },
                 },
             },
@@ -856,12 +994,28 @@ export const openApiDocument = {
                             schema: {
                                 type: 'object',
                                 properties: {
-                                    username: { type: 'string', minLength: 3, maxLength: 30 },
+                                    username: {
+                                        type: 'string',
+                                        minLength: 3,
+                                        maxLength: 30,
+                                    },
                                     bio: { type: 'string', maxLength: 255 },
-                                    avatar: { type: 'string', format: 'binary' },
-                                    profileImage: { type: 'string', format: 'binary' },
-                                    banner: { type: 'string', format: 'binary' },
-                                    bannerImage: { type: 'string', format: 'binary' },
+                                    avatar: {
+                                        type: 'string',
+                                        format: 'binary',
+                                    },
+                                    profileImage: {
+                                        type: 'string',
+                                        format: 'binary',
+                                    },
+                                    banner: {
+                                        type: 'string',
+                                        format: 'binary',
+                                    },
+                                    bannerImage: {
+                                        type: 'string',
+                                        format: 'binary',
+                                    },
                                     cover: { type: 'string', format: 'binary' },
                                 },
                             },
@@ -894,7 +1048,12 @@ export const openApiDocument = {
                     {
                         name: 'limit',
                         in: 'query',
-                        schema: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+                        schema: {
+                            type: 'integer',
+                            minimum: 1,
+                            maximum: 50,
+                            default: 20,
+                        },
                     },
                 ],
                 responses: {

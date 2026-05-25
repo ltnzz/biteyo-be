@@ -98,6 +98,56 @@ export const getProfile = async (req, res) => {
     }
 };
 
+const getMentionQuery = (rawQuery = '') => {
+    const query = String(rawQuery).trim();
+    const mentionStart = query.lastIndexOf('@');
+
+    if (mentionStart >= 0) {
+        return query.slice(mentionStart + 1).match(/^[a-zA-Z0-9_]*/)?.[0] || '';
+    }
+
+    return query.replace(/^@/, '').trim();
+};
+
+export const getMentionSuggestions = async (req, res) => {
+    try {
+        const currentUserId = req.user.id;
+        const query = getMentionQuery(req.query.q || req.query.search || '');
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 8, 1), 20);
+
+        const filters = [ne(users.id, currentUserId)];
+
+        if (query) {
+            filters.push(ilike(users.username, `${query}%`));
+        }
+
+        const mentionUsers = await db
+            .select({
+                id: users.id,
+                username: users.username,
+                avatarUrl: users.avatarUrl,
+                bio: users.bio,
+            })
+            .from(users)
+            .where(and(...filters))
+            .orderBy(users.username)
+            .limit(limit);
+
+        return res.status(200).json({
+            message: 'success',
+            data: mentionUsers.map((user) => ({
+                ...user,
+                mention: `@${user.username}`,
+            })),
+        });
+    } catch (error) {
+        console.error('Mention suggestions error:', error);
+        return res.status(500).json({
+            message: 'Internal server error',
+        });
+    }
+};
+
 export const updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -473,7 +523,12 @@ export const getSavedBites = async (req, res) => {
     }
 };
 
-const getLikedBitesByUserId = async ({ targetUserId, currentUserId, page, limit }) => {
+const getLikedBitesByUserId = async ({
+    targetUserId,
+    currentUserId,
+    page,
+    limit,
+}) => {
     const userLikes = alias(likes, 'user_likes');
     const offset = (page - 1) * limit;
 

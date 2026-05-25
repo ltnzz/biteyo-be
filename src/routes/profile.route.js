@@ -9,6 +9,7 @@ import {
     getUserLikedBites,
     followUser,
     unfollowUser,
+    getMentionSuggestions,
 } from '../controllers/profile.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
 import { upload } from '../middlewares/upload.middleware.js';
@@ -20,6 +21,7 @@ const router = express.Router();
 // ⚠️ route statis harus di atas route dinamis /:username
 router.get('/saved', protect, getSavedBites);
 router.get('/liked', protect, getLikedBites);
+router.get('/mentions', protect, getMentionSuggestions);
 
 router.post('/:username/follow', protect, followUser);
 router.delete('/:username/follow', protect, unfollowUser);
