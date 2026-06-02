@@ -10,7 +10,14 @@ import { resetPasswordTemplate } from '../templates/auth.email.template.js';
 import { OAuth2Client } from 'google-auth-library';
 
 const googleClient = new OAuth2Client();
-const LOGIN_TOKEN_MAX_AGE_DAYS = 30;
+const loginTokenMaxAgeDays = Number.parseInt(
+    process.env.LOGIN_TOKEN_MAX_AGE_DAYS,
+    10
+);
+const LOGIN_TOKEN_MAX_AGE_DAYS =
+    Number.isNaN(loginTokenMaxAgeDays) || loginTokenMaxAgeDays <= 0
+        ? 30
+        : loginTokenMaxAgeDays;
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
