@@ -10,10 +10,11 @@ import { resetPasswordTemplate } from '../templates/auth.email.template.js';
 import { OAuth2Client } from 'google-auth-library';
 
 const googleClient = new OAuth2Client();
+const LOGIN_TOKEN_MAX_AGE_DAYS = 30;
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, {
-        expiresIn: '7d',
+        expiresIn: `${LOGIN_TOKEN_MAX_AGE_DAYS}d`,
     });
 };
 
@@ -23,7 +24,7 @@ const setTokenCookie = (res, token) => {
         httpOnly: true,
         secure: isProduction,
         sameSite: isProduction ? 'none' : 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        maxAge: LOGIN_TOKEN_MAX_AGE_DAYS * 24 * 60 * 60 * 1000,
     });
 };
 
