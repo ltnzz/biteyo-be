@@ -7,7 +7,10 @@ import mapsRoutes from './routes/maps.route.js';
 import feedRoutes from './routes/feed.route.js';
 import profileRoutes from './routes/profile.route.js';
 import notificationRoutes from './routes/notification.route.js';
+import botRoutes from './routes/bot.route.js';
 import { openApiDocument } from './docs/openapi.js';
+import { scheduleDailyJob } from './utils/scheduler.js';
+import { executeDailyUpload } from './controllers/bot.controller.js';
 
 const app = express();
 
@@ -39,9 +42,9 @@ app.use(
     })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 app.get('/', (req, res) => {
     res.send('API running');
@@ -117,9 +120,18 @@ app.use('/api/maps', mapsRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/bot', botRoutes);
 
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+
+    if (process.env.START_INTERNAL_CRON === 'true') {
+        // Schedule to run daily at 08:00 AM
+        scheduleDailyJob('Daily Upload Bot', executeDailyUpload, 8, 0);
+    }
 });
+
+// Nodemon reload trigger
+
