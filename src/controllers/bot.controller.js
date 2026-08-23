@@ -1,15 +1,9 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { eq, ne, desc } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { users, bites, likes, comments } from '../db/schema.js';
 import { botBites, botComments } from '../utils/botData.js';
-
-// Helper to pick N random elements from an array
-function pickN(arr, n) {
-    const shuffled = [...arr].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, n);
-}
 
 /**
  * Executes the core daily upload logic:
@@ -89,58 +83,49 @@ export const executeDailyUpload = async () => {
         })
         .returning();
 
-    // 4. Simulate engagement using other existing users in the system
-    const otherUsers = await db
+    // 4. Simulate engagement using a single designated user
+    // (hanya akun ini yang like & komen postingan bot)
+    const BOT_ENGAGEMENT_USERNAME = 'latanzaakbarfadilah';
+
+    const [engagementUser] = await db
         .select({ id: users.id, username: users.username })
         .from(users)
-        .where(ne(users.username, 'biteyo_bot'));
+        .where(eq(users.username, BOT_ENGAGEMENT_USERNAME))
+        .limit(1);
 
     let simulatedLikes = 0;
     let simulatedComments = 0;
 
-    if (otherUsers.length > 0) {
-        console.log(`[Bot] Simulating engagement using ${otherUsers.length} available users...`);
+    if (!engagementUser || engagementUser.id === botUser.id) {
+        console.log(
+            `[Bot] Engagement user @${BOT_ENGAGEMENT_USERNAME} not found. Skipping engagement simulation.`
+        );
+    } else {
+        console.log(
+            `[Bot] Simulating engagement as @${engagementUser.username}...`
+        );
 
-        // A. Simulate Likes (1 to 3 random users)
-        const numLikes = Math.min(otherUsers.length, Math.floor(Math.random() * 3) + 1);
-        const likers = pickN(otherUsers, numLikes);
+        // A. Like dari akun designated
+        await db
+            .insert(likes)
+            .values({ userId: engagementUser.id, biteId: newBite.id })
+            .onConflictDoNothing();
+        simulatedLikes = 1;
+        console.log('[Bot] Simulated 1 like on the new post.');
 
-        if (likers.length > 0) {
-            await db
-                .insert(likes)
-                .values(
-                    likers.map((u) => ({
-                        userId: u.id,
-                        biteId: newBite.id,
-                    }))
-                );
-            simulatedLikes = likers.length;
-            console.log(`[Bot] Simulated ${simulatedLikes} likes on the new post.`);
-        }
+        // B. Komentar acak dari pool botComments (emote sengaja dipertahankan biar variatif)
+        const content =
+            botComments[Math.floor(Math.random() * botComments.length)];
+        await db.insert(comments).values({
+            userId: engagementUser.id,
+            biteId: newBite.id,
+            content,
+        });
+        simulatedComments = 1;
+        console.log('[Bot] Simulated 1 comment on the new post.');
 
-        // B. Simulate Comments (1 to 2 random users)
-        const numComments = Math.min(otherUsers.length, Math.floor(Math.random() * 2) + 1);
-        const commenters = pickN(otherUsers, numComments);
-        const commentRecords = [];
-
-        for (const commenter of commenters) {
-            const content = botComments[Math.floor(Math.random() * botComments.length)];
-            commentRecords.push({
-                userId: commenter.id,
-                biteId: newBite.id,
-                content,
-            });
-        }
-
-        if (commentRecords.length > 0) {
-            await db.insert(comments).values(commentRecords);
-            simulatedComments = commentRecords.length;
-            console.log(`[Bot] Simulated ${simulatedComments} comments on the new post.`);
-        }
         // likes_count / comments_count di-update otomatis oleh DB trigger
         // (sync_bite_like_count / sync_bite_comment_count, drizzle/0008)
-    } else {
-        console.log('[Bot] No other users found in database to simulate engagement.');
     }
 
     console.log('[Bot] Daily upload complete.');

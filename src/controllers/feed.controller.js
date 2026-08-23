@@ -32,21 +32,27 @@ const safeCreateMentionsFromText = async (options) => {
 };
 
 const getBiteEngagement = async (biteId) => {
-    const [bite] = await db
-        .select({
+    // Atomically recompute isTrending based on current counters and return latest counts
+    // This avoids read-modify-write races by performing the update on the DB side.
+    const [updated] = await db
+        .update(bites)
+        .set({
+            isTrending: getTrendingStatusSql(),
+            updatedAt: new Date(),
+        })
+        .where(eq(bites.id, biteId))
+        .returning({
             viewsCount: bites.viewsCount,
             likesCount: bites.likesCount,
             commentsCount: bites.commentsCount,
-        })
-        .from(bites)
-        .where(eq(bites.id, biteId));
+        });
 
-    if (!bite) {
+    if (!updated) {
         return null;
     }
 
-    const { viewsCount, likesCount, commentsCount } = bite;
-    const viralScore = calculateViralScore(bite);
+    const { viewsCount, likesCount, commentsCount } = updated;
+    const viralScore = calculateViralScore({ viewsCount, likesCount, commentsCount });
     const isTrending = isTrendingScore(viralScore);
 
     return { viewsCount, likesCount, commentsCount, viralScore, isTrending };
