@@ -86,7 +86,6 @@ export const executeDailyUpload = async () => {
             viewsCount: Math.floor(Math.random() * 41) + 15, // 15 to 55 initial views
             likesCount: 0,
             commentsCount: 0,
-            isTrending: false,
         })
         .returning();
 
@@ -138,21 +137,8 @@ export const executeDailyUpload = async () => {
             simulatedComments = commentRecords.length;
             console.log(`[Bot] Simulated ${simulatedComments} comments on the new post.`);
         }
-
-        // C. Update the bite counts and trending status
-        const totalViews = newBite.viewsCount;
-        const viralScore = totalViews + (simulatedLikes * 3) + (simulatedComments * 5);
-        const isTrending = viralScore >= 20; // Matches VIRAL_SCORE_THRESHOLD in feed.controller.js
-
-        await db
-            .update(bites)
-            .set({
-                likesCount: simulatedLikes,
-                commentsCount: simulatedComments,
-                isTrending,
-                updatedAt: new Date(),
-            })
-            .where(eq(bites.id, newBite.id));
+        // likes_count / comments_count di-update otomatis oleh DB trigger
+        // (sync_bite_like_count / sync_bite_comment_count, drizzle/0008)
     } else {
         console.log('[Bot] No other users found in database to simulate engagement.');
     }

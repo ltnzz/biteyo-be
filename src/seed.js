@@ -19,6 +19,10 @@ import {
     saved,
     notifications,
 } from './db/schema.js';
+import {
+    calculateViralScore,
+    isTrendingScore,
+} from './utils/viral.js';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const db = drizzle(pool);
@@ -89,7 +93,7 @@ const biteData = [
         rating: 5,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'street_food',
-        isTrending: true,
+        trending: true,
     },
     {
         foodName: 'Soto Betawi Ragunan',
@@ -102,7 +106,7 @@ const biteData = [
         rating: 5,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'street_food',
-        isTrending: true,
+        trending: true,
     },
     {
         foodName: 'Croissant Butter Almond',
@@ -115,7 +119,7 @@ const biteData = [
         rating: 4,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'cafe',
-        isTrending: false,
+        trending: false,
     },
     {
         foodName: 'Wagyu Steak Set',
@@ -128,7 +132,7 @@ const biteData = [
         rating: 5,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'fine_dining',
-        isTrending: false,
+        trending: false,
     },
     {
         foodName: 'Boba Brown Sugar Fresh Milk',
@@ -141,7 +145,7 @@ const biteData = [
         rating: 4,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'dessert',
-        isTrending: true,
+        trending: true,
     },
     {
         foodName: 'Mie Ayam Bakso Viral TikTok',
@@ -154,7 +158,7 @@ const biteData = [
         rating: 5,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'viral',
-        isTrending: true,
+        trending: true,
     },
     {
         foodName: 'Es Krim Artisan Matcha',
@@ -167,7 +171,7 @@ const biteData = [
         rating: 5,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'hidden_gems',
-        isTrending: false,
+        trending: false,
     },
     {
         foodName: 'Ayam Geprek Sambal Bawang',
@@ -180,7 +184,7 @@ const biteData = [
         rating: 4,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'street_food',
-        isTrending: false,
+        trending: false,
     },
     {
         foodName: 'Pour Over Kopi Aceh Gayo',
@@ -193,7 +197,7 @@ const biteData = [
         rating: 5,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'cafe',
-        isTrending: false,
+        trending: false,
     },
     {
         foodName: 'Tteokbokki Cheese Mozzarella',
@@ -206,7 +210,7 @@ const biteData = [
         rating: 4,
         photoUrl: DEFAULT_BITE_PHOTO_URL,
         category: 'viral',
-        isTrending: true,
+        trending: true,
     },
 ];
 
@@ -246,11 +250,15 @@ async function seed() {
 
     // 2. BITES
     console.log('🍜 Inserting bites...');
-    const biteValues = biteData.map((b, i) => ({
-        ...b,
-        userId: userIds[i % userIds.length],
-        viewsCount: b.isTrending ? 35 + i * 3 : 5 + i,
-    }));
+    const biteValues = biteData.map((b, i) => {
+        const { trending, ...bite } = b;
+
+        return {
+            ...bite,
+            userId: userIds[i % userIds.length],
+            viewsCount: trending ? 35 + i * 3 : 5 + i,
+        };
+    });
     const insertedBites = await db.insert(bites).values(biteValues).returning();
     console.log(`   ✅ ${insertedBites.length} bites inserted`);
 
@@ -375,7 +383,15 @@ async function seed() {
     }
 
     // Trending notifications
-    const trendingBites = insertedBites.filter((b) => b.isTrending);
+    const trendingBites = insertedBites.filter((b) =>
+        isTrendingScore(
+            calculateViralScore({
+                viewsCount: b.viewsCount,
+                likesCount: b.likesCount,
+                commentsCount: b.commentsCount,
+            })
+        )
+    );
     for (const bite of trendingBites.slice(0, 3)) {
         notifValues.push({
             toUserId: bite.userId,

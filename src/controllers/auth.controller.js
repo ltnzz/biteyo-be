@@ -251,6 +251,8 @@ export const resetPassword = async (req, res) => {
             .update(users)
             .set({
                 password: hashedPassword,
+                // cabut semua sesi (JWT) yang diterbitkan sebelum saat ini
+                tokenValidAfter: new Date(),
             })
             .where(eq(users.id, decoded.id));
 

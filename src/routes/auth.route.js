@@ -19,20 +19,27 @@ import {
     googleSignInSchema,
 } from '../middlewares/validations/auth.validation.js';
 import { validate } from '../middlewares/validate.middleware.js';
+import { authLimiter } from '../utils/rate.limit.js';
 
 const router = express.Router();
 
-router.post('/signup', validate(registerSchema), signUp);
-router.post('/signin', validate(loginSchema), signIn);
-router.post('/forgot-password', validate(forgotPasswordSchema), forgotPassword);
+router.post('/signup', authLimiter, validate(registerSchema), signUp);
+router.post('/signin', authLimiter, validate(loginSchema), signIn);
+router.post(
+    '/forgot-password',
+    authLimiter,
+    validate(forgotPasswordSchema),
+    forgotPassword
+);
 router.post(
     '/reset-password/:token',
+    authLimiter,
     validate(resetPasswordSchema),
     resetPassword
 );
 router.post('/logout', logout);
 router.get('/me', protect, getMe);
 
-router.post('/google', validate(googleSignInSchema), googleSignIn);
+router.post('/google', authLimiter, validate(googleSignInSchema), googleSignIn);
 
 export default router;

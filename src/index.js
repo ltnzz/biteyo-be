@@ -11,6 +11,10 @@ import botRoutes from './routes/bot.route.js';
 import { openApiDocument } from './docs/openapi.js';
 import { scheduleDailyJob } from './utils/scheduler.js';
 import { executeDailyUpload } from './controllers/bot.controller.js';
+import {
+    notFoundHandler,
+    errorHandler,
+} from './middlewares/error.middleware.js';
 
 const app = express();
 
@@ -122,16 +126,24 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/bot', botRoutes);
 
+app.use(notFoundHandler);
+app.use(errorHandler);
+
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+// Jangan buka port saat dijalankan oleh test runner (supertest)
+if (!process.env.JEST_WORKER_ID) {
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
 
-    if (process.env.START_INTERNAL_CRON === 'true') {
-        // Schedule to run daily at 08:00 AM
-        scheduleDailyJob('Daily Upload Bot', executeDailyUpload, 8, 0);
-    }
-});
+        if (process.env.START_INTERNAL_CRON === 'true') {
+            // Schedule to run daily at 08:00 AM
+            scheduleDailyJob('Daily Upload Bot', executeDailyUpload, 8, 0);
+        }
+    });
+}
+
+export default app;
 
 // Nodemon reload trigger
 

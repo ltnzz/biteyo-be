@@ -4,7 +4,6 @@ import { db } from '../db/index.js';
 import {
     biteMentions,
     commentMentions,
-    notifications,
     users,
 } from '../db/schema.js';
 import { sendPushToUser } from './push.notification.js';
@@ -117,18 +116,10 @@ export const createMentionsFromText = async ({
     const message =
         sourceType === 'bite'
             ? `${actorUsername || 'Someone'} mentioned you in a BiteYo post`
-            : `${actorUsername || 'Someone'} mentioned you in a comment on ${biteFoodName}`;
+            : `${actorUsername || 'Someone'} mentioned you in a comment on ${biteFoodName || 'a post'}`;
 
-    await db.insert(notifications).values(
-        newlyMentionedUsers.map((user) => ({
-            toUserId: user.id,
-            fromUserId: mentionedByUserId,
-            type: 'mention',
-            biteId,
-            message,
-        }))
-    );
-
+    // Row notifikasi dibuat oleh DB trigger
+    // (drizzle/0013_mention_notification_triggers.sql) — app hanya kirim push.
     await Promise.all(
         newlyMentionedUsers.map((user) =>
             sendPushToUser({

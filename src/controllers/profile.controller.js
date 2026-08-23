@@ -1,13 +1,69 @@
 import { eq, ne, and, desc, ilike, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/index.js';
-import { users, bites, follows, likes, comments, saved } from '../db/schema.js';
+import { users, bites, follows, likes, saved } from '../db/schema.js';
 import { createNotificationAndPush } from '../utils/notification.js';
+import {
+    getViralScoreSqlExpr,
+    getTrendingStatusSqlExpr,
+} from '../utils/viral.js';
 
-const VIRAL_SCORE_THRESHOLD = 20;
+const viewerLikes = alias(likes, 'viewer_likes');
+const viewerSaved = alias(saved, 'viewer_saved');
 
 const getBiteViralScoreSql = () =>
-    sql`(${bites.viewsCount} * 1 + ${bites.likesCount} * 3 + ${bites.commentsCount} * 5)::int`;
+    getViralScoreSqlExpr(
+        bites.viewsCount,
+        bites.likesCount,
+        bites.commentsCount
+    );
+
+const getTrendingStatusSql = () =>
+    getTrendingStatusSqlExpr(
+        bites.viewsCount,
+        bites.likesCount,
+        bites.commentsCount
+    );
+
+const getViewerFlags = () => ({
+    isLiked: viewerLikes.id,
+    isSaved: viewerSaved.id,
+});
+
+const getBiteSelect = (currentUserId, extraFields = {}) => ({
+    id: bites.id,
+    foodName: bites.foodName,
+    locationName: bites.locationName,
+    locationAddress: bites.locationAddress,
+    latitude: bites.latitude,
+    longitude: bites.longitude,
+    placeId: bites.placeId,
+    review: bites.review,
+    rating: bites.rating,
+    photoUrl: bites.photoUrl,
+    category: bites.category,
+    viewsCount: bites.viewsCount,
+    isTrending: getTrendingStatusSql(),
+    viralScore: getBiteViralScoreSql(),
+    createdAt: bites.createdAt,
+    ...extraFields,
+
+    user: {
+        id: users.id,
+        username: users.username,
+        avatarUrl: users.avatarUrl,
+    },
+
+    likesCount: bites.likesCount,
+    commentsCount: bites.commentsCount,
+    ...getViewerFlags(),
+});
+
+const normalizeBiteViewerFlags = (bite) => ({
+    ...bite,
+    isLiked: Boolean(bite.isLiked),
+    isSaved: Boolean(bite.isSaved),
+});
 
 const getFollowStats = async ({ targetUserId, actorUserId }) => {
     const [[{ targetFollowersCount }], [{ actorFollowingCount }]] =
@@ -230,17 +286,18 @@ export const followUser = async (req, res) => {
             });
         }
 
-        const [existingFollow] = await db
-            .select({ id: follows.id })
-            .from(follows)
-            .where(
-                and(
-                    eq(follows.followerId, currentUserId),
-                    eq(follows.followingId, targetUser.id)
-                )
-            );
+        const [follow] = await db
+            .insert(follows)
+            .values({
+                followerId: currentUserId,
+                followingId: targetUser.id,
+            })
+            .onConflictDoNothing({
+                target: [follows.followerId, follows.followingId],
+            })
+            .returning();
 
-        if (existingFollow) {
+        if (!follow) {
             const followStats = await getFollowStats({
                 targetUserId: targetUser.id,
                 actorUserId: currentUserId,
@@ -252,14 +309,6 @@ export const followUser = async (req, res) => {
                 ...followStats,
             });
         }
-
-        const [follow] = await db
-            .insert(follows)
-            .values({
-                followerId: currentUserId,
-                followingId: targetUser.id,
-            })
-            .returning();
 
         const [actor] = await db
             .select({ username: users.username })
@@ -313,24 +362,15 @@ export const unfollowUser = async (req, res) => {
             });
         }
 
-        const [existingFollow] = await db
-            .select({ id: follows.id })
-            .from(follows)
+        const [deletedFollow] = await db
+            .delete(follows)
             .where(
                 and(
                     eq(follows.followerId, currentUserId),
                     eq(follows.followingId, targetUser.id)
                 )
-            );
-
-        if (existingFollow) {
-            await db.delete(follows).where(eq(follows.id, existingFollow.id));
-        }
-
-        const [actor] = await db
-            .select({ username: users.username })
-            .from(users)
-            .where(eq(users.id, currentUserId));
+            )
+            .returning({ id: follows.id });
 
         const followStats = await getFollowStats({
             targetUserId: targetUser.id,
@@ -338,7 +378,7 @@ export const unfollowUser = async (req, res) => {
         });
 
         return res.status(200).json({
-            message: existingFollow
+            message: deletedFollow
                 ? 'User unfollowed'
                 : 'User is not followed',
             following: false,
@@ -401,48 +441,31 @@ export const getUserBites = async (req, res) => {
         }
 
         const userBites = await db
-            .select({
-                id: bites.id,
-                foodName: bites.foodName,
-                locationName: bites.locationName,
-                locationAddress: bites.locationAddress,
-                latitude: bites.latitude,
-                longitude: bites.longitude,
-                placeId: bites.placeId,
-                review: bites.review,
-                rating: bites.rating,
-                photoUrl: bites.photoUrl,
-                category: bites.category,
-                viewsCount: bites.viewsCount,
-                isTrending: sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`,
-                viralScore: getBiteViralScoreSql(),
-                createdAt: bites.createdAt,
-
-                user: {
-                    id: users.id,
-                    username: users.username,
-                    avatarUrl: users.avatarUrl,
-                },
-
-                likesCount: bites.likesCount,
-                commentsCount: bites.commentsCount,
-                isLiked: sql`coalesce(bool_or(${likes.userId} = ${currentUserId}), false)`,
-                isSaved: sql`coalesce(bool_or(${saved.userId} = ${currentUserId}), false)`,
-            })
+            .select(getBiteSelect(currentUserId))
             .from(bites)
             .leftJoin(users, eq(bites.userId, users.id))
-            .leftJoin(likes, eq(likes.biteId, bites.id))
-            .leftJoin(comments, eq(comments.biteId, bites.id))
-            .leftJoin(saved, eq(saved.biteId, bites.id))
+            .leftJoin(
+                viewerLikes,
+                and(
+                    eq(viewerLikes.biteId, bites.id),
+                    eq(viewerLikes.userId, currentUserId)
+                )
+            )
+            .leftJoin(
+                viewerSaved,
+                and(
+                    eq(viewerSaved.biteId, bites.id),
+                    eq(viewerSaved.userId, currentUserId)
+                )
+            )
             .where(eq(bites.userId, user.id))
-            .groupBy(bites.id, users.id)
             .orderBy(desc(bites.createdAt))
             .limit(limit)
             .offset(offset);
 
         return res.status(200).json({
             message: 'success',
-            data: userBites,
+            data: userBites.map(normalizeBiteViewerFlags),
             pagination: {
                 page,
                 limit,
@@ -467,48 +490,27 @@ export const getSavedBites = async (req, res) => {
 
         const savedBites = await db
             .select({
-                id: bites.id,
-                foodName: bites.foodName,
-                locationName: bites.locationName,
-                locationAddress: bites.locationAddress,
-                latitude: bites.latitude,
-                longitude: bites.longitude,
-                placeId: bites.placeId,
-                review: bites.review,
-                rating: bites.rating,
-                photoUrl: bites.photoUrl,
-                category: bites.category,
-                viewsCount: bites.viewsCount,
-                isTrending: sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`,
-                viralScore: getBiteViralScoreSql(),
-                createdAt: bites.createdAt,
-                savedAt: saved.createdAt,
-
-                user: {
-                    id: users.id,
-                    username: users.username,
-                    avatarUrl: users.avatarUrl,
-                },
-
-                likesCount: bites.likesCount,
-                commentsCount: bites.commentsCount,
-                isLiked: sql`coalesce(bool_or(${likes.userId} = ${currentUserId}), false)`,
+                ...getBiteSelect(currentUserId, { savedAt: saved.createdAt }),
                 isSaved: sql`true`,
             })
             .from(saved)
             .innerJoin(bites, eq(saved.biteId, bites.id))
             .leftJoin(users, eq(bites.userId, users.id))
-            .leftJoin(likes, eq(likes.biteId, bites.id))
-            .leftJoin(comments, eq(comments.biteId, bites.id))
+            .leftJoin(
+                viewerLikes,
+                and(
+                    eq(viewerLikes.biteId, bites.id),
+                    eq(viewerLikes.userId, currentUserId)
+                )
+            )
             .where(eq(saved.userId, currentUserId))
-            .groupBy(bites.id, users.id, saved.id)
             .orderBy(desc(saved.createdAt))
             .limit(limit)
             .offset(offset);
 
         return res.status(200).json({
             message: 'success',
-            data: savedBites,
+            data: savedBites.map(normalizeBiteViewerFlags),
             pagination: {
                 page,
                 limit,
@@ -533,43 +535,25 @@ const getLikedBitesByUserId = async ({
     const offset = (page - 1) * limit;
 
     return db
-        .select({
-            id: bites.id,
-            foodName: bites.foodName,
-            locationName: bites.locationName,
-            locationAddress: bites.locationAddress,
-            latitude: bites.latitude,
-            longitude: bites.longitude,
-            placeId: bites.placeId,
-            review: bites.review,
-            rating: bites.rating,
-            photoUrl: bites.photoUrl,
-            category: bites.category,
-            viewsCount: bites.viewsCount,
-            isTrending: sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`,
-            viralScore: getBiteViralScoreSql(),
-            createdAt: bites.createdAt,
-            likedAt: userLikes.createdAt,
-
-            user: {
-                id: users.id,
-                username: users.username,
-                avatarUrl: users.avatarUrl,
-            },
-
-            likesCount: bites.likesCount,
-            commentsCount: bites.commentsCount,
-            isLiked: sql`coalesce(bool_or(${likes.userId} = ${currentUserId}), false)`,
-            isSaved: sql`coalesce(bool_or(${saved.userId} = ${currentUserId}), false)`,
-        })
+        .select(getBiteSelect(currentUserId, { likedAt: userLikes.createdAt }))
         .from(userLikes)
         .innerJoin(bites, eq(userLikes.biteId, bites.id))
         .leftJoin(users, eq(bites.userId, users.id))
-        .leftJoin(likes, eq(likes.biteId, bites.id))
-        .leftJoin(comments, eq(comments.biteId, bites.id))
-        .leftJoin(saved, eq(saved.biteId, bites.id))
+        .leftJoin(
+            viewerLikes,
+            and(
+                eq(viewerLikes.biteId, bites.id),
+                eq(viewerLikes.userId, currentUserId)
+            )
+        )
+        .leftJoin(
+            viewerSaved,
+            and(
+                eq(viewerSaved.biteId, bites.id),
+                eq(viewerSaved.userId, currentUserId)
+            )
+        )
         .where(eq(userLikes.userId, targetUserId))
-        .groupBy(bites.id, users.id, userLikes.id)
         .orderBy(desc(userLikes.createdAt))
         .limit(limit)
         .offset(offset);
@@ -588,7 +572,7 @@ const getLikedBitesResponse = async ({ req, res, targetUserId }) => {
 
     return res.status(200).json({
         message: 'success',
-        data: likedBites,
+        data: likedBites.map(normalizeBiteViewerFlags),
         pagination: {
             page,
             limit,

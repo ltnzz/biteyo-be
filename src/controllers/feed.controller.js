@@ -7,15 +7,20 @@ import {
     comments,
     saved,
 } from '../db/schema.js';
+import { alias } from 'drizzle-orm/pg-core';
 import { desc, eq, sql, and, ilike, or } from 'drizzle-orm';
+import {
+    calculateViralScore,
+    isTrendingScore,
+    getViralScoreSqlExpr,
+    getTrendingStatusSqlExpr,
+} from '../utils/viral.js';
 import { createNotificationAndPush } from '../utils/notification.js';
 import { deleteStorageObject } from '../utils/storage.js';
 import { createMentionsFromText } from '../utils/mention.js';
 
-const VIRAL_SCORE_THRESHOLD = 20;
-
-const getViralScoreSql = (viewsCount, likesCount, commentsCount) =>
-    sql`(${viewsCount} * 1 + ${likesCount} * 3 + ${commentsCount} * 5)::int`;
+const viewerLikes = alias(likes, 'viewer_likes');
+const viewerSaved = alias(saved, 'viewer_saved');
 
 const safeCreateMentionsFromText = async (options) => {
     try {
@@ -27,40 +32,65 @@ const safeCreateMentionsFromText = async (options) => {
 };
 
 const getBiteEngagement = async (biteId) => {
-    const [[{ viewsCount }], [{ likesCount }], [{ commentsCount }]] =
-        await Promise.all([
-            db
-                .select({ viewsCount: bites.viewsCount })
-                .from(bites)
-                .where(eq(bites.id, biteId)),
-            db
-                .select({ likesCount: sql`count(*)::int` })
-                .from(likes)
-                .where(eq(likes.biteId, biteId)),
-            db
-                .select({ commentsCount: sql`count(*)::int` })
-                .from(comments)
-                .where(eq(comments.biteId, biteId)),
-        ]);
-
-    const viralScore =
-        Number(viewsCount || 0) +
-        Number(likesCount || 0) * 3 +
-        Number(commentsCount || 0) * 5;
-    const isTrending = viralScore >= VIRAL_SCORE_THRESHOLD;
-
-    await db
-        .update(bites)
-        .set({
-            likesCount,
-            commentsCount,
-            isTrending,
-            updatedAt: new Date(),
+    const [bite] = await db
+        .select({
+            viewsCount: bites.viewsCount,
+            likesCount: bites.likesCount,
+            commentsCount: bites.commentsCount,
         })
+        .from(bites)
         .where(eq(bites.id, biteId));
+
+    if (!bite) {
+        return null;
+    }
+
+    const { viewsCount, likesCount, commentsCount } = bite;
+    const viralScore = calculateViralScore(bite);
+    const isTrending = isTrendingScore(viralScore);
 
     return { viewsCount, likesCount, commentsCount, viralScore, isTrending };
 };
+
+const getViewerFlags = () => ({
+    isLiked: viewerLikes.id,
+    isSaved: viewerSaved.id,
+});
+
+const getBiteSelect = (userId, extraFields = {}) => ({
+    id: bites.id,
+    foodName: bites.foodName,
+    locationName: bites.locationName,
+    locationAddress: bites.locationAddress,
+    latitude: bites.latitude,
+    longitude: bites.longitude,
+    placeId: bites.placeId,
+    review: bites.review,
+    rating: bites.rating,
+    photoUrl: bites.photoUrl,
+    category: bites.category,
+    viewsCount: bites.viewsCount,
+    isTrending: getTrendingStatusSql(),
+    viralScore: getBiteViralScoreSql(),
+    createdAt: bites.createdAt,
+    ...extraFields,
+
+    user: {
+        id: users.id,
+        username: users.username,
+        avatarUrl: users.avatarUrl,
+    },
+
+    likesCount: bites.likesCount,
+    commentsCount: bites.commentsCount,
+    ...getViewerFlags(),
+});
+
+const normalizeBiteViewerFlags = (bite) => ({
+    ...bite,
+    isLiked: Boolean(bite.isLiked),
+    isSaved: Boolean(bite.isSaved),
+});
 
 export const recordBiteView = async (req, res) => {
     try {
@@ -95,14 +125,18 @@ export const recordBiteView = async (req, res) => {
 };
 
 const getBiteViralScoreSql = () =>
-    getViralScoreSql(
+    getViralScoreSqlExpr(
         bites.viewsCount,
         bites.likesCount,
         bites.commentsCount
     );
 
 const getTrendingStatusSql = () =>
-    sql`${getBiteViralScoreSql()} >= ${VIRAL_SCORE_THRESHOLD}`;
+    getTrendingStatusSqlExpr(
+        bites.viewsCount,
+        bites.likesCount,
+        bites.commentsCount
+    );
 
 const categoryLabels = {
     street_food: 'Street Food',
@@ -155,45 +189,21 @@ const getBiteList = async (req, res, options = {}) => {
     }
 
     let query = db
-        .select({
-            id: bites.id,
-            foodName: bites.foodName,
-            locationName: bites.locationName,
-            locationAddress: bites.locationAddress,
-            latitude: bites.latitude,
-            longitude: bites.longitude,
-            placeId: bites.placeId,
-            review: bites.review,
-            rating: bites.rating,
-            photoUrl: bites.photoUrl,
-            category: bites.category,
-            viewsCount: bites.viewsCount,
-            isTrending: getTrendingStatusSql(),
-            viralScore: getBiteViralScoreSql(),
-            createdAt: bites.createdAt,
-
-            user: {
-                id: users.id,
-                username: users.username,
-                avatarUrl: users.avatarUrl,
-            },
-
-            likesCount: bites.likesCount,
-            commentsCount: bites.commentsCount,
-            isLiked: sql`coalesce(bool_or(${likes.userId} = ${userId}), false)`,
-            isSaved: sql`coalesce(bool_or(${saved.userId} = ${userId}), false)`,
-        })
+        .select(getBiteSelect(userId))
         .from(bites)
         .leftJoin(users, eq(bites.userId, users.id))
-        .leftJoin(likes, eq(likes.biteId, bites.id))
-        .leftJoin(comments, eq(comments.biteId, bites.id))
-        .leftJoin(saved, eq(saved.biteId, bites.id));
+        .leftJoin(
+            viewerLikes,
+            and(eq(viewerLikes.biteId, bites.id), eq(viewerLikes.userId, userId))
+        )
+        .leftJoin(
+            viewerSaved,
+            and(eq(viewerSaved.biteId, bites.id), eq(viewerSaved.userId, userId))
+        );
 
     if (filters.length > 0) {
         query = query.where(and(...filters));
     }
-
-    query = query.groupBy(bites.id, users.id);
 
     const feeds = await (
         sort === 'viral' || sort === 'trending' || trendingOnly
@@ -205,7 +215,7 @@ const getBiteList = async (req, res, options = {}) => {
 
     return res.status(200).json({
         message: 'success',
-        data: feeds,
+        data: feeds.map(normalizeBiteViewerFlags),
         pagination: {
             page,
             limit,
@@ -244,7 +254,6 @@ export const createBite = async (req, res) => {
             review,
             rating,
             category,
-            isTrending,
         } = req.body;
 
         const userId = req.user.id;
@@ -265,7 +274,6 @@ export const createBite = async (req, res) => {
                 rating,
                 photoUrl,
                 category,
-                isTrending: false,
             })
             .returning();
 
@@ -364,41 +372,24 @@ export const getBiteById = async (req, res) => {
         const { id } = req.params;
         const userId = req.user.id;
         const [bite] = await db
-            .select({
-                id: bites.id,
-                foodName: bites.foodName,
-                locationName: bites.locationName,
-                locationAddress: bites.locationAddress,
-                latitude: bites.latitude,
-                longitude: bites.longitude,
-                placeId: bites.placeId,
-                review: bites.review,
-                rating: bites.rating,
-                photoUrl: bites.photoUrl,
-                category: bites.category,
-                viewsCount: bites.viewsCount,
-                isTrending: getTrendingStatusSql(),
-                viralScore: getBiteViralScoreSql(),
-                createdAt: bites.createdAt,
-
-                user: {
-                    id: users.id,
-                    username: users.username,
-                    avatarUrl: users.avatarUrl,
-                },
-
-                likesCount: bites.likesCount,
-                commentsCount: bites.commentsCount,
-                isLiked: sql`coalesce(bool_or(${likes.userId} = ${userId}), false)`,
-                isSaved: sql`coalesce(bool_or(${saved.userId} = ${userId}), false)`,
-            })
+            .select(getBiteSelect(userId))
             .from(bites)
             .leftJoin(users, eq(bites.userId, users.id))
-            .leftJoin(likes, eq(likes.biteId, bites.id))
-            .leftJoin(comments, eq(comments.biteId, bites.id))
-            .leftJoin(saved, eq(saved.biteId, bites.id))
-            .where(eq(bites.id, id))
-            .groupBy(bites.id, users.id);
+            .leftJoin(
+                viewerLikes,
+                and(
+                    eq(viewerLikes.biteId, bites.id),
+                    eq(viewerLikes.userId, userId)
+                )
+            )
+            .leftJoin(
+                viewerSaved,
+                and(
+                    eq(viewerSaved.biteId, bites.id),
+                    eq(viewerSaved.userId, userId)
+                )
+            )
+            .where(eq(bites.id, id));
 
         if (!bite) {
             return res.status(404).json({ message: 'Bite not found' });
@@ -406,7 +397,7 @@ export const getBiteById = async (req, res) => {
 
         return res.status(200).json({
             message: 'success',
-            bite,
+            bite: normalizeBiteViewerFlags(bite),
         });
     } catch (error) {
         console.error('Get bite by id error:', error);
@@ -419,26 +410,29 @@ export const toggleLikeBite = async (req, res) => {
         const { id } = req.params;
         const userId = req.user.id;
 
+        const actorUsers = alias(users, 'actor_users');
+
         const [bite] = await db
             .select({
                 id: bites.id,
                 userId: bites.userId,
                 foodName: bites.foodName,
+                actorUsername: actorUsers.username,
             })
             .from(bites)
+            .leftJoin(actorUsers, eq(actorUsers.id, userId))
             .where(eq(bites.id, id));
 
         if (!bite) {
             return res.status(404).json({ message: 'Bite not found' });
         }
 
-        const [existingLike] = await db
-            .select({ id: likes.id })
-            .from(likes)
-            .where(and(eq(likes.userId, userId), eq(likes.biteId, id)));
+        const [deletedLike] = await db
+            .delete(likes)
+            .where(and(eq(likes.userId, userId), eq(likes.biteId, id)))
+            .returning({ id: likes.id });
 
-        if (existingLike) {
-            await db.delete(likes).where(eq(likes.id, existingLike.id));
+        if (deletedLike) {
             const engagement = await getBiteEngagement(id);
 
             return res.status(200).json({
@@ -451,22 +445,33 @@ export const toggleLikeBite = async (req, res) => {
         const [like] = await db
             .insert(likes)
             .values({ userId, biteId: id })
+            .onConflictDoNothing({
+                target: [likes.userId, likes.biteId],
+            })
             .returning();
 
-        const [actor] = await db
-            .select({ username: users.username })
-            .from(users)
-            .where(eq(users.id, userId));
+        if (!like) {
+            const engagement = await getBiteEngagement(id);
 
-        await createNotificationAndPush({
-            toUserId: bite.userId,
-            fromUserId: userId,
-            type: 'like',
-            biteId: id,
-            message: `${actor?.username || 'Someone'} liked your ${bite.foodName} post`,
-        });
+            return res.status(200).json({
+                message: 'Bite already liked',
+                liked: true,
+                ...engagement,
+            });
+        }
 
-        const engagement = await getBiteEngagement(id);
+        // push FCM dan fetch engagement berjalan paralel
+        // agar respons tidak menunggu network call Firebase
+        const [, engagement] = await Promise.all([
+            createNotificationAndPush({
+                toUserId: bite.userId,
+                fromUserId: userId,
+                type: 'like',
+                biteId: id,
+                message: `${bite.actorUsername || 'Someone'} liked your ${bite.foodName} post`,
+            }),
+            getBiteEngagement(id),
+        ]);
 
         return res.status(201).json({
             message: 'Bite liked',
@@ -494,14 +499,12 @@ export const toggleSaveBite = async (req, res) => {
             return res.status(404).json({ message: 'Bite not found' });
         }
 
-        const [existingSavedBite] = await db
-            .select({ id: saved.id })
-            .from(saved)
-            .where(and(eq(saved.userId, userId), eq(saved.biteId, id)));
+        const [deletedSavedBite] = await db
+            .delete(saved)
+            .where(and(eq(saved.userId, userId), eq(saved.biteId, id)))
+            .returning({ id: saved.id });
 
-        if (existingSavedBite) {
-            await db.delete(saved).where(eq(saved.id, existingSavedBite.id));
-
+        if (deletedSavedBite) {
             return res.status(200).json({
                 message: 'Bite unsaved',
                 saved: false,
@@ -511,7 +514,17 @@ export const toggleSaveBite = async (req, res) => {
         const [savedBite] = await db
             .insert(saved)
             .values({ userId, biteId: id })
+            .onConflictDoNothing({
+                target: [saved.userId, saved.biteId],
+            })
             .returning();
+
+        if (!savedBite) {
+            return res.status(200).json({
+                message: 'Bite already saved',
+                saved: true,
+            });
+        }
 
         return res.status(201).json({
             message: 'Bite saved',
@@ -565,26 +578,27 @@ export const createComment = async (req, res) => {
             .from(users)
             .where(eq(users.id, userId));
 
-        await createNotificationAndPush({
-            toUserId: bite.userId,
-            fromUserId: userId,
-            type: 'comment',
-            biteId: id,
-            message: `${actor?.username || 'Someone'} commented on your ${bite.foodName} post`,
-        });
-
-        const engagement = await getBiteEngagement(id);
-
-        const mentionedUsers = await safeCreateMentionsFromText({
-            text: content,
-            sourceType: 'comment',
-            sourceId: comment.id,
-            biteId: id,
-            mentionedByUserId: userId,
-            actorUsername: actor?.username,
-            biteFoodName: bite.foodName,
-            excludedUserIds: [bite.userId],
-        });
+        // push FCM, engagement, dan mentions berjalan paralel
+        const [, engagement, mentionedUsers] = await Promise.all([
+            createNotificationAndPush({
+                toUserId: bite.userId,
+                fromUserId: userId,
+                type: 'comment',
+                biteId: id,
+                message: `${actor?.username || 'Someone'} commented on your ${bite.foodName} post`,
+            }),
+            getBiteEngagement(id),
+            safeCreateMentionsFromText({
+                text: content,
+                sourceType: 'comment',
+                sourceId: comment.id,
+                biteId: id,
+                mentionedByUserId: userId,
+                actorUsername: actor?.username,
+                biteFoodName: bite.foodName,
+                excludedUserIds: [bite.userId],
+            }),
+        ]);
 
         return res.status(201).json({
             message: 'Comment created',
