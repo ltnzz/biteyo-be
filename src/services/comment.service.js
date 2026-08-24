@@ -2,8 +2,8 @@ import { db } from '../db/index.js';
 import { bites, comments, users } from '../db/schema.js';
 import { desc, eq } from 'drizzle-orm';
 import { sendNotificationPush } from '../utils/notification.js';
-import { createMentionsFromText } from '../utils/mention.js';
 import { logger } from '../utils/logger.js';
+import { createMentionsFromText } from '../utils/mention.js';
 import {
     ensureBiteExists,
     getBiteEngagement,
@@ -43,15 +43,17 @@ export const addComment = async ({ userId, biteId, content }) => {
         .from(users)
         .where(eq(users.id, userId));
 
-    // push FCM, engagement, dan mentions berjalan paralel
-    const [, engagement, mentionedUsers] = await Promise.all([
-        sendNotificationPush({
-            toUserId: bite.userId,
-            fromUserId: userId,
-            type: 'comment',
-            biteId,
-            message: `${actor?.username || 'Someone'} commented on your ${bite.foodName} post`,
-        }),
+    // Push FCM fire-and-forget (record notifikasi dibuat trigger DB);
+    // engagement dan mentions tetap di-await karena dibutuhkan respons.
+    sendNotificationPush({
+        toUserId: bite.userId,
+        fromUserId: userId,
+        type: 'comment',
+        biteId,
+        message: `${actor?.username || 'Someone'} commented on your ${bite.foodName} post`,
+    }).catch((error) => logger.error('Comment push failed:', error));
+
+    const [engagement, mentionedUsers] = await Promise.all([
         getBiteEngagement(biteId),
         safeCreateMentionsFromText({
             text: content,

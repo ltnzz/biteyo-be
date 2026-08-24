@@ -3,6 +3,7 @@ import { bites, users, likes, saved } from '../db/schema.js';
 import { alias } from 'drizzle-orm/pg-core';
 import { and, eq } from 'drizzle-orm';
 import { sendNotificationPush } from '../utils/notification.js';
+import { logger } from '../utils/logger.js';
 import {
     ensureBiteExists,
     getBiteEngagement,
@@ -51,18 +52,17 @@ export const toggleLike = async ({ userId, biteId }) => {
         return { status: 200, liked: true, alreadyLiked: true, ...engagement };
     }
 
-    // push FCM dan fetch engagement berjalan paralel
-    // agar respons tidak menunggu network call Firebase
-    const [, engagement] = await Promise.all([
-        sendNotificationPush({
-            toUserId: bite.userId,
-            fromUserId: userId,
-            type: 'like',
-            biteId,
-            message: `${bite.actorUsername || 'Someone'} liked your ${bite.foodName} post`,
-        }),
-        getBiteEngagement(biteId),
-    ]);
+    // Push FCM fire-and-forget: record notifikasi sudah dibuat trigger DB,
+    // push hanya enhancer — respons tidak menunggu network call Firebase.
+    sendNotificationPush({
+        toUserId: bite.userId,
+        fromUserId: userId,
+        type: 'like',
+        biteId,
+        message: `${bite.actorUsername || 'Someone'} liked your ${bite.foodName} post`,
+    }).catch((error) => logger.error('Like push failed:', error));
+
+    const engagement = await getBiteEngagement(biteId);
 
     return { status: 201, liked: true, like, ...engagement };
 };
