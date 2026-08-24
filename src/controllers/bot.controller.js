@@ -139,18 +139,13 @@ export const executeDailyUpload = async () => {
 
 /**
  * Express Route controller to trigger the daily upload webhook.
- * Validates the CRON_SECRET request header/query.
+ * Secret HANYA diterima via header `x-cron-secret` — query param
+ * rentan bocor ke access log/referrer, dan nilai secret tidak pernah
+ * ditulis ke log.
  */
 export const triggerDailyUpload = async (req, res) => {
     try {
-        const authHeader = req.headers['x-cron-secret'];
-        const querySecret = req.query.secret;
-        const bearerHeader = req.headers['authorization'];
-
-        let secret = authHeader || querySecret;
-        if (!secret && bearerHeader && bearerHeader.startsWith('Bearer ')) {
-            secret = bearerHeader.slice(7);
-        }
+        const secret = req.headers['x-cron-secret'];
 
         if (!process.env.CRON_SECRET) {
             logger.warn('[Bot] Warning: CRON_SECRET is not set in environment variables.');
@@ -159,8 +154,8 @@ export const triggerDailyUpload = async (req, res) => {
             });
         }
 
-        if (secret !== process.env.CRON_SECRET) {
-            logger.warn(`[Bot] Unauthorized trigger attempt. Provided secret: "${secret}"`);
+        if (!secret || secret !== process.env.CRON_SECRET) {
+            logger.warn('[Bot] Unauthorized trigger attempt (invalid or missing x-cron-secret header).');
             return res.status(401).json({
                 message: 'Unauthorized: Invalid cron secret key.',
             });
