@@ -1,0 +1,124 @@
+import { db } from '../db/index.js';
+import { bites, users } from '../db/schema.js';
+import { and, eq } from 'drizzle-orm';
+import { deleteStorageObject } from '../utils/storage.js';
+import { createMentionsFromText } from '../utils/mention.js';
+import { logger } from '../utils/logger.js';
+import { AppError } from '../utils/errors.js';
+
+const safeCreateMentionsFromText = async (options) => {
+    try {
+        return await createMentionsFromText(options);
+    } catch (error) {
+        logger.error('Create mentions error:', error);
+        return [];
+    }
+};
+
+export const createBite = async ({ userId, body, photoPath }) => {
+    const {
+        foodName,
+        locationName,
+        locationAddress,
+        latitude,
+        longitude,
+        placeId,
+        review,
+        rating,
+        category,
+    } = body;
+
+    const [newBite] = await db
+        .insert(bites)
+        .values({
+            userId,
+            foodName,
+            locationName,
+            locationAddress,
+            latitude: latitude?.toString(),
+            longitude: longitude?.toString(),
+            placeId,
+            review,
+            rating,
+            photoUrl: photoPath,
+            category,
+        })
+        .returning();
+
+    const [actor] = await db
+        .select({ username: users.username })
+        .from(users)
+        .where(eq(users.id, userId));
+
+    const mentionedUsers = await safeCreateMentionsFromText({
+        text: review,
+        sourceType: 'bite',
+        sourceId: newBite.id,
+        biteId: newBite.id,
+        mentionedByUserId: userId,
+        actorUsername: actor?.username,
+    });
+
+    return { bite: newBite, mentions: mentionedUsers };
+};
+
+export const updateBite = async ({ userId, biteId, body }) => {
+    const { foodName, review, rating, category } = body;
+
+    const existingBite = await db
+        .select()
+        .from(bites)
+        .where(and(eq(bites.id, biteId), eq(bites.userId, userId)));
+
+    if (existingBite.length === 0) {
+        throw new AppError('Bite not found', 404);
+    }
+
+    const [updatedBite] = await db
+        .update(bites)
+        .set({
+            foodName,
+            review,
+            rating,
+            category,
+            updatedAt: new Date(),
+        })
+        .where(eq(bites.id, biteId))
+        .returning();
+
+    let mentionedUsers = [];
+
+    if (review !== undefined) {
+        const [actor] = await db
+            .select({ username: users.username })
+            .from(users)
+            .where(eq(users.id, userId));
+
+        mentionedUsers = await safeCreateMentionsFromText({
+            text: review,
+            sourceType: 'bite',
+            sourceId: updatedBite.id,
+            biteId: updatedBite.id,
+            mentionedByUserId: userId,
+            actorUsername: actor?.username,
+        });
+    }
+
+    return { bite: updatedBite, mentions: mentionedUsers };
+};
+
+export const deleteBite = async ({ userId, biteId }) => {
+    const existingBite = await db
+        .select()
+        .from(bites)
+        .where(and(eq(bites.id, biteId), eq(bites.userId, userId)));
+
+    if (existingBite.length === 0) {
+        throw new AppError('Bite not found', 404);
+    }
+
+    const [bite] = existingBite;
+    await deleteStorageObject(bite.photoUrl);
+
+    await db.delete(bites).where(eq(bites.id, biteId));
+};
