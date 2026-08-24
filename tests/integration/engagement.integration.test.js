@@ -117,7 +117,7 @@ maybeDescribe('integration: engagement & notification', () => {
         // LIKE oleh aktor (bukan pemilik) -> trigger harus buat notifikasi
         const liked = await request(app)
             .post(`/api/feed/bites/${biteId}/like`)
-            .set('Authorization', `Bearer ${actorToken}`);
+            .set('Cookie', `token=${actorToken}`);
 
         expect([200, 201]).toContain(liked.status);
         expect(liked.body.liked).toBe(true);
@@ -136,7 +136,7 @@ maybeDescribe('integration: engagement & notification', () => {
         // UNLIKE
         const unliked = await request(app)
             .post(`/api/feed/bites/${biteId}/like`)
-            .set('Authorization', `Bearer ${actorToken}`);
+            .set('Cookie', `token=${actorToken}`);
 
         expect(unliked.status).toBe(200);
         expect(unliked.body.liked).toBe(false);
@@ -155,7 +155,7 @@ maybeDescribe('integration: engagement & notification', () => {
 
         const res = await request(app)
             .post(`/api/feed/bites/${biteId}/comments`)
-            .set('Authorization', `Bearer ${actorToken}`)
+            .set('Cookie', `token=${actorToken}`)
             .send({ content: 'komentar integration test' });
 
         expect(res.status).toBe(201);
