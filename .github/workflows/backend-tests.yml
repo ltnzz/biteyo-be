@@ -5,6 +5,12 @@ on:
     branches: [main, master]
   pull_request:
 
+env:
+  JWT_SECRET: ci_dummy_jwt_secret_for_tests_only
+  SUPABASE_URL: https://ci-dummy.supabase.co
+  SUPABASE_SERVICE_ROLE_KEY: ci_dummy_service_role_key
+  CLIENT_URL: http://localhost:5173
+
 jobs:
   gitleaks:
     name: Secret scanning
@@ -55,10 +61,6 @@ jobs:
 
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/biteyo_test
-      JWT_SECRET: ci_dummy_jwt_secret_for_tests_only
-      SUPABASE_URL: https://ci-dummy.supabase.co
-      SUPABASE_SERVICE_ROLE_KEY: ci_dummy_service_role_key
-      CLIENT_URL: http://localhost:5173
 
     steps:
       - uses: actions/checkout@v4

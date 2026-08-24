@@ -54,7 +54,21 @@ CREATE TABLE "saved" (
 );
 --> statement-breakpoint
 ALTER TABLE "users" RENAME COLUMN "name" TO "username";--> statement-breakpoint
-ALTER TABLE "users" ALTER COLUMN "id" SET DATA TYPE uuid;--> statement-breakpoint
+-- Konversi users.id serial -> uuid (aman dijalankan ulang; skip jika sudah uuid)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'id'
+          AND data_type <> 'uuid'
+    ) THEN
+        ALTER TABLE "users" ALTER COLUMN "id" DROP DEFAULT;
+        ALTER TABLE "users" ALTER COLUMN "id" SET DATA TYPE uuid USING "id"::text::uuid;
+    END IF;
+END
+$$;--> statement-breakpoint
 ALTER TABLE "users" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();--> statement-breakpoint
 ALTER TABLE "users" ADD COLUMN "password" text NOT NULL;--> statement-breakpoint
 ALTER TABLE "users" ADD COLUMN "bio" text;--> statement-breakpoint

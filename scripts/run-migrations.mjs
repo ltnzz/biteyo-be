@@ -3,7 +3,10 @@
  * - File diurutkan by nama (0000... 0014...).
  * - File yang sudah diterapkan dicatat di tabel _migrations.
  *
- * Jalankan: node scripts/run-migrations.mjs
+ * Jalankan:
+ *   node scripts/run-migrations.mjs                 -> jalankan migrasi yang belum diterapkan
+ *   node scripts/run-migrations.mjs --seed-history  -> catat semua file lama sebagai "sudah diterapkan"
+ *                                                      tanpa eksekusi (untuk DB yang sudah termigrasi manual)
  */
 import 'dotenv/config';
 import fs from 'node:fs';
@@ -13,6 +16,7 @@ import pg from 'pg';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DRIZZLE_DIR = path.join(__dirname, '..', 'drizzle');
+const SEED_HISTORY = process.argv.includes('--seed-history');
 
 if (!process.env.DATABASE_URL) {
     console.error('DATABASE_URL tidak terpasang.');
@@ -35,6 +39,21 @@ const files = fs
 
 const { rows } = await pool.query('select filename from _migrations');
 const applied = new Set(rows.map((r) => r.filename));
+
+if (SEED_HISTORY) {
+    const inserted = await pool.query(
+        `insert into _migrations (filename)
+         select unnest($1::text[])
+         on conflict (filename) do nothing`,
+        [files],
+    );
+
+    await pool.end();
+    console.log(
+        `\nSeed history selesai. ${inserted.rowCount} file tercatat, total ${files.length} dikenal.`,
+    );
+    process.exit(0);
+}
 
 let ran = 0;
 
