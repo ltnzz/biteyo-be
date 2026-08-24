@@ -2,7 +2,7 @@ import { eq, ne, and, desc, ilike, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/index.js';
 import { users, bites, follows, likes, saved } from '../db/schema.js';
-import { createNotificationAndPush } from '../utils/notification.js';
+import { sendNotificationPush } from '../utils/notification.js';
 import {
     getViralScoreSqlExpr,
     getTrendingStatusSqlExpr,
@@ -316,7 +316,7 @@ export const followUser = async (req, res) => {
             .from(users)
             .where(eq(users.id, currentUserId));
 
-        await createNotificationAndPush({
+        await sendNotificationPush({
             toUserId: targetUser.id,
             fromUserId: currentUserId,
             type: 'follow',

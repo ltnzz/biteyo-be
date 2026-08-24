@@ -1,7 +1,7 @@
 import { db } from '../db/index.js';
 import { bites, comments, users } from '../db/schema.js';
 import { desc, eq } from 'drizzle-orm';
-import { createNotificationAndPush } from '../utils/notification.js';
+import { sendNotificationPush } from '../utils/notification.js';
 import { createMentionsFromText } from '../utils/mention.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -45,7 +45,7 @@ export const addComment = async ({ userId, biteId, content }) => {
 
     // push FCM, engagement, dan mentions berjalan paralel
     const [, engagement, mentionedUsers] = await Promise.all([
-        createNotificationAndPush({
+        sendNotificationPush({
             toUserId: bite.userId,
             fromUserId: userId,
             type: 'comment',

@@ -1,7 +1,17 @@
 import { sendPushToUser } from './push.notification.js';
 import { logger } from '../utils/logger.js';
 
-export const createNotificationAndPush = async ({
+/**
+ * KIRIM PUSH FCM untuk sebuah notifikasi.
+ *
+ * PENTING — ownership notifikasi:
+ * - Record di tabel `notifications` dibuat oleh TRIGGER DATABASE
+ *   (lihat drizzle/0006_supabase_phase1.sql untuk like/comment/follow
+ *   dan drizzle/0013_mention_notification_triggers.sql untuk mention).
+ * - Fungsi ini TIDAK membuat record; ia hanya mengirim push FCM
+ *   setelah trigger menulis row. Gagal push tidak mempengaruhi data.
+ */
+export const sendNotificationPush = async ({
     toUserId,
     fromUserId,
     type,

@@ -2,7 +2,7 @@ import { db } from '../db/index.js';
 import { bites, users, likes, saved } from '../db/schema.js';
 import { alias } from 'drizzle-orm/pg-core';
 import { and, eq } from 'drizzle-orm';
-import { createNotificationAndPush } from '../utils/notification.js';
+import { sendNotificationPush } from '../utils/notification.js';
 import {
     ensureBiteExists,
     getBiteEngagement,
@@ -54,7 +54,7 @@ export const toggleLike = async ({ userId, biteId }) => {
     // push FCM dan fetch engagement berjalan paralel
     // agar respons tidak menunggu network call Firebase
     const [, engagement] = await Promise.all([
-        createNotificationAndPush({
+        sendNotificationPush({
             toUserId: bite.userId,
             fromUserId: userId,
             type: 'like',
