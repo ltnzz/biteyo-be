@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+    deleteNotification,
     getNotifications,
     markNotificationAsRead,
     registerFcmToken,
@@ -15,5 +16,6 @@ router.get('/', getNotifications);
 router.post('/fcm-token', registerFcmToken);
 router.delete('/fcm-token', unregisterFcmToken);
 router.patch('/:id/read', markNotificationAsRead);
+router.delete('/:id', deleteNotification);
 
 export default router;

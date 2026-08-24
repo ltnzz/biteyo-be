@@ -66,11 +66,23 @@ describe('API contract', () => {
             ['GET', '/api/feed/bites'],
             ['GET', '/api/feed/categories'],
             ['GET', '/api/auth/me'],
+            ['GET', '/api/notifications/'],
+            ['DELETE', '/api/notifications/some-id'],
         ])('%s %s responds 401', async (method, url) => {
             const res = await request(app)[method.toLowerCase()](url);
 
             expect(res.status).toBe(401);
             expect(res.headers['content-type']).toMatch(/json/);
+        });
+    });
+
+    describe('DELETE /api/notifications/:id ownership', () => {
+        it('responds 401 without auth cookie', async () => {
+            const res = await request(app).delete(
+                '/api/notifications/00000000-0000-0000-0000-000000000000',
+            );
+
+            expect(res.status).toBe(401);
         });
     });
 
