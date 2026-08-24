@@ -26,12 +26,19 @@ const generateToken = (id) => {
     });
 };
 
-const setTokenCookie = (res, token) => {
-    const isProduction = process.env.NODE_ENV === 'production';
+const setTokenCookie = (req, res, token) => {
+    // Deteksi https dari request, bukan NODE_ENV, agar cookie lintas-site
+    // (FE & BE beda subdomain/public suffix) tetap terkirim di produksi:
+    // SameSite=None wajib dipasangkan Secure, kalau tidak browser menolaknya.
+    const isHttps =
+        req.secure ||
+        req.protocol === 'https' ||
+        (req.headers['x-forwarded-proto'] || '').includes('https');
+
     res.cookie('token', token, {
         httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? 'none' : 'lax',
+        secure: isHttps,
+        sameSite: isHttps ? 'none' : 'lax',
         maxAge: LOGIN_TOKEN_MAX_AGE_DAYS * 24 * 60 * 60 * 1000,
     });
 };
@@ -89,7 +96,7 @@ export const signUp = async (req, res) => {
 
         const token = generateToken(newUser[0].id);
 
-        setTokenCookie(res, token);
+        setTokenCookie(req, res, token);
 
         const { password: _, ...safeUser } = newUser[0];
 
@@ -134,7 +141,7 @@ export const signIn = async (req, res) => {
 
         const token = generateToken(user.id);
 
-        setTokenCookie(res, token);
+        setTokenCookie(req, res, token);
 
         const { password: _, ...safeUser } = user;
 
@@ -360,7 +367,7 @@ export const googleSignIn = async (req, res) => {
         }
 
         const token = generateToken(user.id);
-        setTokenCookie(res, token);
+        setTokenCookie(req, res, token);
 
         const { password, ...safeUser } = user;
 
