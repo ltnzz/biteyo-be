@@ -18,6 +18,7 @@ import {
 import { createNotificationAndPush } from '../utils/notification.js';
 import { deleteStorageObject } from '../utils/storage.js';
 import { createMentionsFromText } from '../utils/mention.js';
+import { logger } from '../utils/logger.js';
 
 const viewerLikes = alias(likes, 'viewer_likes');
 const viewerSaved = alias(saved, 'viewer_saved');
@@ -26,7 +27,7 @@ const safeCreateMentionsFromText = async (options) => {
     try {
         return await createMentionsFromText(options);
     } catch (error) {
-        console.error('Create mentions error:', error);
+        logger.error('Create mentions error:', error);
         return [];
     }
 };
@@ -125,7 +126,7 @@ export const recordBiteView = async (req, res) => {
             ...engagement,
         });
     } catch (error) {
-        console.error('Record bite view error:', error);
+        logger.error('Record bite view error:', error);
         return res.status(500).json({ message: 'Server error' });
     }
 };
@@ -307,7 +308,7 @@ export const createBite = async (req, res) => {
             },
         });
     } catch (error) {
-        console.error('Create bite error:', error);
+        logger.error('Create bite error:', error);
         return res.status(500).json({
             message: 'Server error',
         });
@@ -318,7 +319,7 @@ export const getBite = async (req, res) => {
     try {
         return getBiteList(req, res);
     } catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({
             message: 'internal server error',
         });
@@ -332,7 +333,7 @@ export const getTrendingBites = async (req, res) => {
             trendingOnly: true,
         });
     } catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({
             message: 'internal server error',
         });
@@ -345,7 +346,7 @@ export const getBitesByCategory = async (req, res) => {
             category: req.params.category,
         });
     } catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({
             message: 'internal server error',
         });
@@ -366,7 +367,7 @@ export const searchBites = async (req, res) => {
             search,
         });
     } catch (err) {
-        console.error(err);
+        logger.error(err);
         res.status(500).json({
             message: 'internal server error',
         });
@@ -406,7 +407,7 @@ export const getBiteById = async (req, res) => {
             bite: normalizeBiteViewerFlags(bite),
         });
     } catch (error) {
-        console.error('Get bite by id error:', error);
+        logger.error('Get bite by id error:', error);
         return res.status(500).json({ message: 'Server error' });
     }
 };
@@ -486,7 +487,7 @@ export const toggleLikeBite = async (req, res) => {
             ...engagement,
         });
     } catch (error) {
-        console.error('Toggle like error:', error);
+        logger.error('Toggle like error:', error);
         return res.status(500).json({ message: 'Server error' });
     }
 };
@@ -538,7 +539,7 @@ export const toggleSaveBite = async (req, res) => {
             savedBite,
         });
     } catch (error) {
-        console.error('Toggle save error:', error);
+        logger.error('Toggle save error:', error);
         return res.status(500).json({ message: 'Server error' });
     }
 };
@@ -616,7 +617,7 @@ export const createComment = async (req, res) => {
             ...engagement,
         });
     } catch (error) {
-        console.error('Create comment error:', error);
+        logger.error('Create comment error:', error);
         return res.status(500).json({ message: 'Server error' });
     }
 };
@@ -660,7 +661,7 @@ export const getBiteComments = async (req, res) => {
             commentsCount: biteComments.length,
         });
     } catch (error) {
-        console.error('Get comments error:', error);
+        logger.error('Get comments error:', error);
         return res.status(500).json({ message: 'Server error' });
     }
 };
@@ -689,7 +690,7 @@ export const getBiteComments = async (req, res) => {
 //             data: feeds,
 //         });
 //     } catch (err) {
-//         console.error(err);
+//         logger.error(err);
 //         res.status(500).json({
 //             message: 'internal server error',
 //         });
@@ -755,7 +756,7 @@ export const updateBite = async (req, res) => {
             },
         });
     } catch (error) {
-        console.error('Update bite error:', error);
+        logger.error('Update bite error:', error);
 
         return res.status(500).json({
             message: 'Server error',
@@ -789,7 +790,7 @@ export const deleteBite = async (req, res) => {
             message: 'Bite deleted successfully',
         });
     } catch (error) {
-        console.error('Delete bite error:', error);
+        logger.error('Delete bite error:', error);
 
         return res.status(500).json({
             message: 'Server error',

@@ -4,6 +4,7 @@ import { eq, desc } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { users, bites, likes, comments } from '../db/schema.js';
 import { botBites, botComments } from '../utils/botData.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Executes the core daily upload logic:
@@ -15,7 +16,7 @@ import { botBites, botComments } from '../utils/botData.js';
  * @returns {Promise<Object>} Created bite data with simulated engagement statistics.
  */
 export const executeDailyUpload = async () => {
-    console.log('[Bot] Running daily upload task...');
+    logger.info('[Bot] Running daily upload task...');
 
     // 1. Get or create the bot user
     let [botUser] = await db
@@ -25,7 +26,7 @@ export const executeDailyUpload = async () => {
         .limit(1);
 
     if (!botUser) {
-        console.log('[Bot] Bot user @biteyo_bot not found. Creating new bot user...');
+        logger.info('[Bot] Bot user @biteyo_bot not found. Creating new bot user...');
         // Hash a randomized password to secure the account
         const randomPassword = crypto.randomBytes(16).toString('hex');
         const hashedPassword = await bcrypt.hash(randomPassword, 10);
@@ -41,7 +42,7 @@ export const executeDailyUpload = async () => {
             })
             .returning();
         botUser = createdUser;
-        console.log(`[Bot] Successfully created bot user @${botUser.username}`);
+        logger.info(`[Bot] Successfully created bot user @${botUser.username}`);
     }
 
     // 2. Select a food review to post, avoiding the 3 most recently posted by the bot
@@ -60,7 +61,7 @@ export const executeDailyUpload = async () => {
     }
 
     const chosen = availableBites[Math.floor(Math.random() * availableBites.length)];
-    console.log(`[Bot] Selected review for upload: "${chosen.foodName}"`);
+    logger.info(`[Bot] Selected review for upload: "${chosen.foodName}"`);
 
     // 3. Insert the bite into the database
     const [newBite] = await db
@@ -97,11 +98,11 @@ export const executeDailyUpload = async () => {
     let simulatedComments = 0;
 
     if (!engagementUser || engagementUser.id === botUser.id) {
-        console.log(
+        logger.info(
             `[Bot] Engagement user @${BOT_ENGAGEMENT_USERNAME} not found. Skipping engagement simulation.`
         );
     } else {
-        console.log(
+        logger.info(
             `[Bot] Simulating engagement as @${engagementUser.username}...`
         );
 
@@ -111,7 +112,7 @@ export const executeDailyUpload = async () => {
             .values({ userId: engagementUser.id, biteId: newBite.id })
             .onConflictDoNothing();
         simulatedLikes = 1;
-        console.log('[Bot] Simulated 1 like on the new post.');
+        logger.info('[Bot] Simulated 1 like on the new post.');
 
         // B. Komentar acak dari pool botComments (emote sengaja dipertahankan biar variatif)
         const content =
@@ -122,13 +123,13 @@ export const executeDailyUpload = async () => {
             content,
         });
         simulatedComments = 1;
-        console.log('[Bot] Simulated 1 comment on the new post.');
+        logger.info('[Bot] Simulated 1 comment on the new post.');
 
         // likes_count / comments_count di-update otomatis oleh DB trigger
         // (sync_bite_like_count / sync_bite_comment_count, drizzle/0008)
     }
 
-    console.log('[Bot] Daily upload complete.');
+    logger.info('[Bot] Daily upload complete.');
     return {
         bite: newBite,
         simulatedLikes,
@@ -152,14 +153,14 @@ export const triggerDailyUpload = async (req, res) => {
         }
 
         if (!process.env.CRON_SECRET) {
-            console.warn('[Bot] Warning: CRON_SECRET is not set in environment variables.');
+            logger.warn('[Bot] Warning: CRON_SECRET is not set in environment variables.');
             return res.status(500).json({
                 message: 'Cron configuration error on server.',
             });
         }
 
         if (secret !== process.env.CRON_SECRET) {
-            console.warn(`[Bot] Unauthorized trigger attempt. Provided secret: "${secret}"`);
+            logger.warn(`[Bot] Unauthorized trigger attempt. Provided secret: "${secret}"`);
             return res.status(401).json({
                 message: 'Unauthorized: Invalid cron secret key.',
             });
@@ -172,7 +173,7 @@ export const triggerDailyUpload = async (req, res) => {
             data: result,
         });
     } catch (error) {
-        console.error('[Bot] HTTP Trigger Error:', error);
+        logger.error('[Bot] HTTP Trigger Error:', error);
         return res.status(500).json({
             message: 'Server error during daily bot upload.',
             error: error.message,

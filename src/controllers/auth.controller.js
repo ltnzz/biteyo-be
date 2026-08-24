@@ -8,6 +8,7 @@ import { users } from '../db/schema.js';
 import { sendEmail } from '../utils/email.js';
 import { resetPasswordTemplate } from '../templates/auth.email.template.js';
 import { OAuth2Client } from 'google-auth-library';
+import { logger } from '../utils/logger.js';
 
 const googleClient = new OAuth2Client();
 const loginTokenMaxAgeDays = Number.parseInt(
@@ -98,7 +99,7 @@ export const signUp = async (req, res) => {
             user: safeUser,
         });
     } catch (error) {
-        console.log('Error in signUp controller', error);
+        logger.info('Error in signUp controller', error);
 
         return res.status(500).json({
             message: 'Internal server error',
@@ -143,7 +144,7 @@ export const signIn = async (req, res) => {
             user: safeUser,
         });
     } catch (error) {
-        console.log('Error in signIn controller', error);
+        logger.info('Error in signIn controller', error);
 
         return res.status(500).json({
             message: 'Internal server error',
@@ -159,7 +160,7 @@ export const logout = async (_req, res) => {
             message: 'Logout success',
         });
     } catch (error) {
-        console.log('Error in logout controller', error);
+        logger.info('Error in logout controller', error);
 
         return res.status(500).json({
             message: 'Internal server error',
@@ -207,7 +208,7 @@ export const forgotPassword = async (req, res) => {
             message: `Reset link sent to ${maskedEmail}. Please check your inbox.`,
         });
     } catch (error) {
-        console.log('Error in forgotPassword controller', error);
+        logger.info('Error in forgotPassword controller', error);
 
         return res.status(500).json({
             message: 'Internal server error',
@@ -260,7 +261,7 @@ export const resetPassword = async (req, res) => {
             message: 'Password reset success',
         });
     } catch (error) {
-        console.log('Error in resetPassword controller', error);
+        logger.info('Error in resetPassword controller', error);
 
         return res.status(400).json({
             message: 'Invalid or expired token',
@@ -294,7 +295,7 @@ export const getMe = async (req, res) => {
             user: safeUser,
         });
     } catch (error) {
-        console.log('Error in getMe controller', error);
+        logger.info('Error in getMe controller', error);
 
         return res.status(500).json({
             message: 'Internal server error',
@@ -369,7 +370,7 @@ export const googleSignIn = async (req, res) => {
             user: safeUser,
         });
     } catch (error) {
-        console.error('Error in googleSignIn controller', error);
+        logger.error('Error in googleSignIn controller', error);
         return res.status(401).json({
             message: 'Invalid Google token',
         });

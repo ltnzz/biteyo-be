@@ -1,4 +1,5 @@
 import { sendPushToUser } from './push.notification.js';
+import { logger } from '../utils/logger.js';
 
 export const createNotificationAndPush = async ({
     toUserId,
@@ -23,7 +24,7 @@ export const createNotificationAndPush = async ({
             },
         });
     } catch (error) {
-        console.error('Push notification failed:', error);
+        logger.error('Push notification failed:', error);
     }
 
     return null;

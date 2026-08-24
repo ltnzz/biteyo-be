@@ -4,8 +4,9 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
-        "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --watch",
+        "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --testPathIgnorePatterns /tests/integration/",
+        "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --forceExit tests/integration",
+        "db:migrate": "node scripts/run-migrations.mjs",
         "start": "node ./src/index.js",
         "dev": "nodemon ./src/index.js",
         "seed": "node src/seed.js"

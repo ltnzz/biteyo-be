@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 const cache = new Map();
 
 export const searchLocation = async (req, res) => {
@@ -35,7 +36,7 @@ export const searchLocation = async (req, res) => {
 
         return res.json(result);
     } catch (err) {
-        console.error(err);
+        logger.error(err);
         return res.status(500).json({ message: 'Server error' });
     }
 };

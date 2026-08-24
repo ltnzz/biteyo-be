@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger.js';
 /**
  * A lightweight, zero-dependency scheduler that schedules a task to run daily at a specific time (local timezone).
  * Uses standard JavaScript `setTimeout` and calculates the time difference dynamically.
@@ -9,12 +10,12 @@
  */
 export const scheduleDailyJob = (jobName, callback, hour = 8, minute = 0) => {
     const run = async () => {
-        console.log(`[Scheduler] [${new Date().toISOString()}] Starting job: ${jobName}`);
+        logger.info(`[Scheduler] [${new Date().toISOString()}] Starting job: ${jobName}`);
         try {
             await callback();
-            console.log(`[Scheduler] [${new Date().toISOString()}] Job '${jobName}' completed successfully.`);
+            logger.info(`[Scheduler] [${new Date().toISOString()}] Job '${jobName}' completed successfully.`);
         } catch (error) {
-            console.error(`[Scheduler] [${new Date().toISOString()}] Job '${jobName}' failed with error:`, error);
+            logger.error(`[Scheduler] [${new Date().toISOString()}] Job '${jobName}' failed with error:`, error);
         }
         scheduleNext();
     };
@@ -40,7 +41,7 @@ export const scheduleDailyJob = (jobName, callback, hour = 8, minute = 0) => {
 
         setTimeout(run, delay);
 
-        console.log(
+        logger.info(
             `[Scheduler] Job '${jobName}' scheduled successfully. Next run: ${next.toString()} (in ${(delay / 1000 / 60 / 60).toFixed(2)} hours)`
         );
     };

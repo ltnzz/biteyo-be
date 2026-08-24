@@ -1,6 +1,7 @@
 import multer from 'multer';
 
 import { AppError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 export const notFoundHandler = (req, _res, next) => {
     next(new AppError(`Route ${req.method} ${req.originalUrl} not found`, 404));
@@ -36,10 +37,7 @@ export const errorHandler = (err, req, res, _next) => {
     }
 
     if (statusCode >= 500) {
-        console.error(
-            `[error] ${req.method} ${req.originalUrl}`,
-            err
-        );
+        logger.child(req.id).error(err.message, err);
     }
 
     return res.status(statusCode).json({

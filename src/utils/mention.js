@@ -7,6 +7,7 @@ import {
     users,
 } from '../db/schema.js';
 import { sendPushToUser } from './push.notification.js';
+import { logger } from '../utils/logger.js';
 
 const MENTION_REGEX = /(^|[^a-zA-Z0-9_])@([a-zA-Z0-9_]{3,30})\b/g;
 const MAX_MENTIONS_PER_SOURCE = 10;
@@ -132,7 +133,7 @@ export const createMentionsFromText = async ({
                     fromUserId: mentionedByUserId,
                 },
             }).catch((error) => {
-                console.error('Mention push notification failed:', error);
+                logger.error('Mention push notification failed:', error);
             })
         )
     );

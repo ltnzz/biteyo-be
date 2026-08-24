@@ -1,6 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { fcmTokens, notifications, users } from '../db/schema.js';
+import { logger } from '../utils/logger.js';
 
 export const registerFcmToken = async (req, res) => {
     try {
@@ -31,7 +32,7 @@ export const registerFcmToken = async (req, res) => {
             token: savedToken,
         });
     } catch (error) {
-        console.error('Register FCM token error:', error);
+        logger.error('Register FCM token error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -55,7 +56,7 @@ export const unregisterFcmToken = async (req, res) => {
 
         return res.status(200).json({ message: 'FCM token removed' });
     } catch (error) {
-        console.error('Unregister FCM token error:', error);
+        logger.error('Unregister FCM token error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -97,7 +98,7 @@ export const getNotifications = async (req, res) => {
             },
         });
     } catch (error) {
-        console.error('Get notifications error:', error);
+        logger.error('Get notifications error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -124,7 +125,7 @@ export const markNotificationAsRead = async (req, res) => {
             notification,
         });
     } catch (error) {
-        console.error('Mark notification as read error:', error);
+        logger.error('Mark notification as read error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };

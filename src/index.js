@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -15,6 +16,7 @@ import {
     notFoundHandler,
     errorHandler,
 } from './middlewares/error.middleware.js';
+import { logger } from './utils/logger.js';
 
 const app = express();
 
@@ -49,6 +51,32 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// request-id + access log terstruktur
+app.use((req, res, next) => {
+    const incoming = req.headers['x-request-id'];
+    const reqId =
+        typeof incoming === 'string' && incoming.trim()
+            ? incoming.trim().slice(0, 64)
+            : crypto.randomUUID();
+
+    req.id = reqId;
+    res.setHeader('X-Request-Id', reqId);
+
+    const start = process.hrtime.bigint();
+    res.on('finish', () => {
+        if (req.path.startsWith('/api/docs')) return;
+
+        logger.child(reqId).info('request', {
+            method: req.method,
+            path: req.originalUrl,
+            status: res.statusCode,
+            durationMs: Number(process.hrtime.bigint() - start) / 1e6,
+        });
+    });
+
+    next();
+});
 
 app.get('/', (req, res) => {
     res.send('API running');

@@ -7,6 +7,7 @@ import {
     getViralScoreSqlExpr,
     getTrendingStatusSqlExpr,
 } from '../utils/viral.js';
+import { logger } from '../utils/logger.js';
 
 const viewerLikes = alias(likes, 'viewer_likes');
 const viewerSaved = alias(saved, 'viewer_saved');
@@ -147,7 +148,7 @@ export const getProfile = async (req, res) => {
             },
         });
     } catch (error) {
-        console.error('Error in getProfile controller', error);
+        logger.error('Error in getProfile controller', error);
         return res.status(500).json({
             message: 'Internal server error',
         });
@@ -197,7 +198,7 @@ export const getMentionSuggestions = async (req, res) => {
             })),
         });
     } catch (error) {
-        console.error('Mention suggestions error:', error);
+        logger.error('Mention suggestions error:', error);
         return res.status(500).json({
             message: 'Internal server error',
         });
@@ -255,7 +256,7 @@ export const updateProfile = async (req, res) => {
             user: safeUser,
         });
     } catch (error) {
-        console.error('Error in updateProfile controller', error);
+        logger.error('Error in updateProfile controller', error);
         return res.status(500).json({
             message: 'Internal server error',
         });
@@ -334,7 +335,7 @@ export const followUser = async (req, res) => {
             ...followStats,
         });
     } catch (error) {
-        console.error('Follow user error:', error);
+        logger.error('Follow user error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -385,7 +386,7 @@ export const unfollowUser = async (req, res) => {
             ...followStats,
         });
     } catch (error) {
-        console.error('Unfollow user error:', error);
+        logger.error('Unfollow user error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -413,7 +414,7 @@ export const deleteAccount = async (req, res) => {
             message: 'Account deleted successfully',
         });
     } catch (error) {
-        console.error('Error in deleteAccount controller', error);
+        logger.error('Error in deleteAccount controller', error);
         return res.status(500).json({
             message: 'Internal server error',
         });
@@ -473,7 +474,7 @@ export const getUserBites = async (req, res) => {
             },
         });
     } catch (error) {
-        console.error('Error in getUserBites controller', error);
+        logger.error('Error in getUserBites controller', error);
         return res.status(500).json({
             message: 'Internal server error',
         });
@@ -518,7 +519,7 @@ export const getSavedBites = async (req, res) => {
             },
         });
     } catch (error) {
-        console.error('Error in getSavedBites controller', error);
+        logger.error('Error in getSavedBites controller', error);
         return res.status(500).json({
             message: 'Internal server error',
         });
@@ -589,7 +590,7 @@ export const getLikedBites = async (req, res) => {
             targetUserId: req.user.id,
         });
     } catch (error) {
-        console.error('Error in getLikedBites controller', error);
+        logger.error('Error in getLikedBites controller', error);
         return res.status(500).json({
             message: 'Internal server error',
         });
@@ -615,7 +616,7 @@ export const getUserLikedBites = async (req, res) => {
             targetUserId: user.id,
         });
     } catch (error) {
-        console.error('Error in getUserLikedBites controller', error);
+        logger.error('Error in getUserLikedBites controller', error);
         return res.status(500).json({
             message: 'Internal server error',
         });
