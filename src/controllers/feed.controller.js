@@ -55,6 +55,7 @@ export const getBite = async (req, res) =>
             sort: req.query.sort,
             category: req.query.category,
             search: req.query.search ?? req.query.q,
+            scope: req.query.scope,
         });
 
         return {

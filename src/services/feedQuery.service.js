@@ -1,5 +1,12 @@
 import { db } from '../db/index.js';
-import { BITE_CATEGORIES, bites, users, likes, saved } from '../db/schema.js';
+import {
+    BITE_CATEGORIES,
+    bites,
+    users,
+    likes,
+    saved,
+    follows,
+} from '../db/schema.js';
 import { alias } from 'drizzle-orm/pg-core';
 import {
     desc,
@@ -19,6 +26,7 @@ import { AppError } from '../utils/errors.js';
 
 export const viewerLikes = alias(likes, 'viewer_likes');
 export const viewerSaved = alias(saved, 'viewer_saved');
+const viewerFollows = alias(follows, 'viewer_follows');
 
 export const getTrendingStatusSql = () =>
     getTrendingStatusSqlExpr(
@@ -153,7 +161,15 @@ const baseListQuery = (userId) =>
 
 export const listBites = async (
     reqUser,
-    { page, limit, sort, category, search, trendingOnly } = {}
+    {
+        page,
+        limit,
+        sort,
+        category,
+        search,
+        trendingOnly,
+        scope,
+    } = {}
 ) => {
     const userId = reqUser?.id;
 
@@ -165,6 +181,10 @@ export const listBites = async (
         throw new AppError('Invalid category', 400);
     }
 
+    if (scope === 'following' && !userId) {
+        throw new AppError('Login required for following feed', 401);
+    }
+
     const filters = [];
 
     if (category) {
@@ -173,6 +193,15 @@ export const listBites = async (
 
     if (trendingOnly) {
         filters.push(getTrendingStatusSql());
+    }
+
+    if (scope === 'following') {
+        // hanya bite dari orang yang di-follow user ini
+        filters.push(sql`exists (
+            select 1 from ${viewerFollows}
+            where ${viewerFollows.followerId} = ${userId}
+              and ${viewerFollows.followingId} = ${bites.userId}
+        )`);
     }
 
     if (search?.trim()) {
