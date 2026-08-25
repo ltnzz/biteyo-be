@@ -426,6 +426,16 @@ export const openApiDocument = {
                         schema: { type: 'boolean' },
                     },
                     {
+                        name: 'scope',
+                        in: 'query',
+                        description:
+                            'Set `following` untuk hanya menampilkan bite dari user yang di-follow.',
+                        schema: {
+                            type: 'string',
+                            enum: ['all', 'following'],
+                        },
+                    },
+                    {
                         name: 'q',
                         in: 'query',
                         description:
@@ -1127,6 +1137,97 @@ export const openApiDocument = {
                 ],
                 responses: {
                     200: { description: 'Notification marked as read' },
+                    404: { $ref: '#/components/responses/NotFound' },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                },
+            },
+        },
+        '/api/notifications/{id}': {
+            delete: {
+                tags: ['Notifications'],
+                summary: 'Delete a notification (owner only)',
+                security: [{ bearerAuth: [] }],
+                parameters: [
+                    {
+                        name: 'id',
+                        in: 'path',
+                        required: true,
+                        schema: { type: 'string', format: 'uuid' },
+                    },
+                ],
+                responses: {
+                    200: { description: 'Notification deleted' },
+                    404: { $ref: '#/components/responses/NotFound' },
+                    401: { $ref: '#/components/responses/Unauthorized' },
+                },
+            },
+        },
+        '/api/feed/share/{id}': {
+            get: {
+                tags: ['Feed'],
+                summary: 'Public OG preview page for a shared bite link',
+                description:
+                    'Mengembalikan HTML berisi Open Graph meta untuk crawler '
+                    + '(WhatsApp/X) lalu mengalihkan pengunjung ke aplikasi. '
+                    + 'Tidak memerlukan autentikasi.',
+                parameters: [
+                    {
+                        name: 'id',
+                        in: 'path',
+                        required: true,
+                        schema: { type: 'string', format: 'uuid' },
+                    },
+                ],
+                responses: {
+                    200: { description: 'HTML preview page with OG meta tags' },
+                    302: { description: 'Redirect to the app (bite not found)' },
+                },
+            },
+        },
+        '/api/profile/{username}/activity': {
+            get: {
+                tags: ['Profile'],
+                summary: "User's monthly posting activity",
+                security: [{ bearerAuth: [] }],
+                parameters: [
+                    {
+                        name: 'username',
+                        in: 'path',
+                        required: true,
+                        schema: { type: 'string' },
+                    },
+                ],
+                responses: {
+                    200: {
+                        description:
+                            'Jumlah bite per bulan, selalu 6 bulan terakhir '
+                            + '(bulan tanpa aktivitas = 0)',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        message: { type: 'string' },
+                                        data: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    month: {
+                                                        type: 'string',
+                                                        example: '2026-08',
+                                                    },
+                                                    count: {
+                                                        type: 'integer',
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
                     404: { $ref: '#/components/responses/NotFound' },
                     401: { $ref: '#/components/responses/Unauthorized' },
                 },
