@@ -26,7 +26,6 @@ import { AppError } from '../utils/errors.js';
 
 export const viewerLikes = alias(likes, 'viewer_likes');
 export const viewerSaved = alias(saved, 'viewer_saved');
-const viewerFollows = alias(follows, 'viewer_follows');
 
 export const getTrendingStatusSql = () =>
     getTrendingStatusSqlExpr(
@@ -196,11 +195,13 @@ export const listBites = async (
     }
 
     if (scope === 'following') {
-        // hanya bite dari orang yang di-follow user ini
+        // hanya bite dari orang yang di-follow user ini.
+        // catatan: alias drizzle tidak bisa di-embed di raw sql (hanya
+        // nama aliasnya yang dirender), jadi pakai tabel asli + alias manual.
         filters.push(sql`exists (
-            select 1 from ${viewerFollows}
-            where ${viewerFollows.followerId} = ${userId}
-              and ${viewerFollows.followingId} = ${bites.userId}
+            select 1 from ${follows} f
+            where f.follower_id = ${userId}
+              and f.following_id = ${bites.userId}
         )`);
     }
 

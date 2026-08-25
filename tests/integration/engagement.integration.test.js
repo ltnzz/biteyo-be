@@ -66,6 +66,7 @@ const dbBiteState = async (biteId) => {
 maybeDescribe('integration: engagement & notification', () => {
     let ownerToken;
     let actorToken;
+    let ownerEmail;
     let biteId;
 
     beforeAll(async () => {
@@ -76,6 +77,7 @@ maybeDescribe('integration: engagement & notification', () => {
         const actor = await signupUser(`actor${Math.floor(Math.random() * 100000)}`);
         ownerToken = owner.token;
         actorToken = actor.token;
+        ownerEmail = owner.email;
 
         // bite milik "owner", dibuat langsung via SQL agar test
         // tidak bergantung pada Supabase Storage
@@ -170,5 +172,37 @@ maybeDescribe('integration: engagement & notification', () => {
             [biteId],
         );
         expect(commentNotifs.rows[0].n).toBe(beforeComments.rows[0].n + 1);
+    });
+
+    test('scope=following hanya menampilkan bite dari yang di-follow', async () => {
+        // sebelum follow: feed following aktor tidak boleh berisi bite owner
+        const before = await request(app)
+            .get('/api/feed/bites?scope=following&limit=50')
+            .set('Cookie', `token=${actorToken}`);
+
+        expect(before.status).toBe(200);
+        expect(
+            before.body.data.some((b) => b.id === biteId),
+        ).toBe(false);
+
+        // actor mulai follow owner
+        const [{ rows: actorRows }, { rows: ownerRows }] = await Promise.all([
+            query('select id from users where email like $1', [
+                `${TEST_EMAIL_PREFIX}%actor%`,
+            ]),
+            query('select id from users where email = $1', [ownerEmail]),
+        ]);
+
+        await query(
+            `insert into follows (follower_id, following_id) values ($1, $2)`,
+            [actorRows[0].id, ownerRows[0].id],
+        );
+
+        const after = await request(app)
+            .get('/api/feed/bites?scope=following&limit=50')
+            .set('Cookie', `token=${actorToken}`);
+
+        expect(after.status).toBe(200);
+        expect(after.body.data.some((b) => b.id === biteId)).toBe(true);
     });
 });
