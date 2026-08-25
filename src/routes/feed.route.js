@@ -22,8 +22,12 @@ import {
     createBiteSchema,
     updateBiteSchema,
 } from '../middlewares/validations/feed.validation.js';
+import { sharePreview } from '../controllers/share.controller.js';
 
 const router = express.Router();
+
+// Publik: dipakai crawler (WA/X) untuk membaca meta OG saat link dibagikan
+router.get('/share/:id', sharePreview);
 
 router.get('/categories', protect, getBiteCategories);
 router.get('/bites', protect, getBite);
