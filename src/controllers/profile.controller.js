@@ -82,6 +82,59 @@ const getFollowStats = async ({ targetUserId, actorUserId }) => {
     return { targetFollowersCount, actorFollowingCount };
 };
 
+/**
+ * Aktivitas posting bulanan user untuk grafik profil.
+ * Selalu mengembalikan 6 bulan terakhir (bulan tanpa aktivitas = 0).
+ */
+export const getProfileActivity = async (req, res) => {
+    try {
+        const { username } = req.params;
+
+        const [user] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.username, username));
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const rows = await db
+            .select({
+                month: sql`to_char(date_trunc('month', ${bites.createdAt}), 'YYYY-MM')`,
+                count: sql`count(*)::int`,
+            })
+            .from(bites)
+            .where(
+                and(
+                    eq(bites.userId, user.id),
+                    sql`${bites.createdAt} >= date_trunc('month', now()) - interval '5 months'`
+                )
+            )
+            .groupBy(sql`date_trunc('month', ${bites.createdAt})`)
+            .orderBy(sql`date_trunc('month', ${bites.createdAt})`);
+
+        const countByMonth = new Map(rows.map((r) => [r.month, Number(r.count)]));
+        const data = [];
+        const cursor = new Date();
+        cursor.setDate(1);
+
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(cursor.getFullYear(), cursor.getMonth() - i, 1);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            data.push({ month: key, count: countByMonth.get(key) ?? 0 });
+        }
+
+        return res.status(200).json({
+            message: 'success',
+            data,
+        });
+    } catch (error) {
+        logger.error('Get profile activity error:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 export const getProfile = async (req, res) => {
     try {
         const { username } = req.params;

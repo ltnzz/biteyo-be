@@ -1,6 +1,7 @@
 import express from 'express';
 import {
-    getProfile,
+getProfile,
+getProfileActivity,
     updateProfile,
     deleteAccount,
     getUserBites,
@@ -27,6 +28,7 @@ router.post('/:username/follow', protect, followUser);
 router.delete('/:username/follow', protect, unfollowUser);
 router.get('/:username', protect, getProfile);
 router.get('/:username/bites', protect, getUserBites);
+router.get('/:username/activity', protect, getProfileActivity);
 router.get('/:username/liked', protect, getUserLikedBites);
 router.get('/:username/likes', protect, getUserLikedBites);
 
