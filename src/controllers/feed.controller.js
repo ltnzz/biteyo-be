@@ -1,6 +1,7 @@
 import { BITE_CATEGORIES } from '../db/schema.js';
 import {
     findBiteById,
+    getTrendingKeywords as fetchTrendingKeywords,
     listBites,
     recordView,
 } from '../services/feedQuery.service.js';
@@ -120,6 +121,17 @@ export const getBiteCategories = async (req, res) =>
             })),
         },
     }));
+
+// Publik: dipakai widget trending & dropdown search
+export const getTrendingKeywords = async (req, res) =>
+    handle(res, async () => {
+        const keywords = await fetchTrendingKeywords(req.query.q);
+
+        return {
+            status: 200,
+            body: { message: 'success', data: keywords },
+        };
+    });
 
 export const getBiteById = async (req, res) =>
     handle(res, async () => ({

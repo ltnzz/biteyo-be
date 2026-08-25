@@ -1162,6 +1162,59 @@ export const openApiDocument = {
                 },
             },
         },
+        '/api/feed/trending-keywords': {
+            get: {
+                tags: ['Feed'],
+                summary: 'Weekly trending food keywords',
+                description:
+                    'Keyword dari food_name bite 7 hari terakhir, diberi skor '
+                    + 'engagement (views×1 + likes×3 + comments×5). '
+                    + 'Tidak memerlukan autentikasi.',
+                parameters: [
+                    {
+                        name: 'q',
+                        in: 'query',
+                        description:
+                            'Filter opsional: hanya keyword yang mengandung teks ini.',
+                        schema: { type: 'string' },
+                    },
+                ],
+                responses: {
+                    200: {
+                        description: 'Daftar keyword terurut skor tertinggi',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        message: { type: 'string' },
+                                        data: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    keyword: { type: 'string' },
+                                                    count: {
+                                                        type: 'integer',
+                                                        description:
+                                                            'Jumlah bite dengan nama ini',
+                                                    },
+                                                    score: {
+                                                        type: 'integer',
+                                                        description:
+                                                            'Skor engagement total',
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
         '/api/feed/share/{id}': {
             get: {
                 tags: ['Feed'],

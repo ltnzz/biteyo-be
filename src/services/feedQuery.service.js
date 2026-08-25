@@ -250,3 +250,35 @@ export const findBiteById = async (biteId, userId) => {
 
     return normalizeBiteViewerFlags(bite);
 };
+
+/**
+ * Keyword trending mingguan: food_name paling sering diposting,
+ * dibobot engagement (rumus viral score yang sama dengan index DB).
+ * Skor = COUNT(bite) × Σ(views×1 + likes×3 + comments×5)
+ */
+export const getTrendingKeywords = async (query, limit = 8) => {
+    const rows = await db
+        .select({
+            keyword: sql`lower(${bites.foodName})`,
+            count: sql`count(*)::int`,
+            score: sql`sum(${bites.viewsCount} + ${bites.likesCount} * 3 + ${bites.commentsCount} * 5)::int`,
+        })
+        .from(bites)
+        .where(
+            and(
+                sql`${bites.createdAt} >= now() - interval '7 days'`,
+                query?.trim()
+                    ? ilike(bites.foodName, `%${query.trim()}%`)
+                    : undefined
+            )
+        )
+        .groupBy(sql`lower(${bites.foodName})`)
+        .orderBy(sql`sum(${bites.viewsCount} + ${bites.likesCount} * 3 + ${bites.commentsCount} * 5) desc`)
+        .limit(limit);
+
+    return rows.map(({ keyword, count, score }) => ({
+        keyword,
+        count: Number(count),
+        score: Number(score),
+    }));
+};

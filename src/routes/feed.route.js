@@ -23,11 +23,14 @@ import {
     updateBiteSchema,
 } from '../middlewares/validations/feed.validation.js';
 import { sharePreview } from '../controllers/share.controller.js';
+import { getTrendingKeywords } from '../controllers/feed.controller.js';
 
 const router = express.Router();
 
 // Publik: dipakai crawler (WA/X) untuk membaca meta OG saat link dibagikan
 router.get('/share/:id', sharePreview);
+// Publik: widget trending & saran keyword di search
+router.get('/trending-keywords', getTrendingKeywords);
 
 router.get('/categories', protect, getBiteCategories);
 router.get('/bites', protect, getBite);
