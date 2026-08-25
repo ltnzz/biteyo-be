@@ -1,242 +1,168 @@
 # Biteyo Backend
 
-Biteyo Backend adalah REST API untuk aplikasi sosial berbagi rekomendasi makanan. Backend ini menangani autentikasi, feed bite, komentar, like, save, profil user, mention username, notifikasi, push notification, upload media, dan pencarian lokasi.
+[![Backend Tests](https://github.com/ltnzz/biteyo-be/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/ltnzz/biteyo-be/actions/workflows/backend-tests.yml)
+![Node](https://img.shields.io/badge/Node-22+-339933?style=flat-square&logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5-000000?style=flat-square&logo=express&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+
+REST API untuk **Biteyo** — aplikasi sosial berbagi rekomendasi makanan. Menangani autentikasi, feed bite, engagement (like/comment/save), profil & follow, notifikasi + push FCM, upload media, dan pencarian lokasi.
+
+> 📖 **Dokumentasi API interaktif**: [`/api/docs`](https://biteyo-be.vercel.app/api/docs) (Swagger UI, JSON mentah di `/api/docs.json`)
+>
+> 🎨 **Frontend**: [biteyo-fe](https://github.com/ltnzz/biteyo-fe) · 🌐 **Live**: [www.biteyo.my.id](https://www.biteyo.my.id/)
+>
+> 🏗️ Keputusan arsitektur & trade-off: lihat [ARCHITECTURE.md](./ARCHITECTURE.md)
+
+## Arsitektur
+
+```mermaid
+flowchart LR
+    subgraph Client["Browser"]
+        FE["React SPA<br/>(biteyo-fe)"]
+    end
+
+    subgraph Vercel["Vercel"]
+        PROXY["Same-origin proxy<br/>/api/* rewrite"]
+        BE["Biteyo REST API<br/>Express + Drizzle"]
+    end
+
+    subgraph Supabase["Supabase"]
+        PG[("PostgreSQL<br/>+ triggers notifikasi<br/>+ Realtime publication")]
+        STORE[("Storage<br/>avatar/banner/foto")]
+    end
+
+    FCM["Firebase Cloud Messaging"]
+    NOM["Nominatim<br/>(OpenStreetMap)"]
+
+    FE -- "fetch credentials:include" --> PROXY --> BE
+    BE --> PG
+    BE --> STORE
+    BE -- push notification --> FCM
+    BE -- location search --> NOM
+    PG -- "postgres_changes" --> FE
+```
+
+Poin kunci:
+
+- **Cookie-only auth** — JWT hanya hidup di cookie `httpOnly`; frontend tidak pernah menyimpan token.
+- **Same-origin proxy** — frontend memanggil `/api/*` di domainnya sendiri; Vercel meneruskan ke backend. Cookie menjadi first-party dan CORS tidak jadi isu lintas-site.
+- **DB triggers own notification rows** — record notifikasi like/comment/follow/mention ditulis trigger PostgreSQL; backend hanya mengirim push FCM (`sendNotificationPush`).
 
 ## Fitur
 
-- Autentikasi user dengan signup, signin, logout, JWT, dan cookie HTTP-only.
-- Login dengan Google ID token.
-- Forgot password dan reset password lewat email.
-- Feed bite makanan dengan foto, nama makanan, lokasi, alamat, rating, kategori, dan review.
-- Kategori bite: `street_food`, `cafe`, `fine_dining`, `dessert`, `viral`, dan `hidden_gems`.
-- Search bite berdasarkan nama makanan, lokasi, dan review.
-- Trending bite berdasarkan skor dari view, like, dan komentar.
-- Detail bite, update bite, delete bite, dan hapus file foto dari storage.
-- Like dan unlike bite.
-- Save dan unsave bite.
-- Komentar pada bite.
-- Mention user dengan format `@username` di review bite dan komentar.
-- Notifikasi untuk like, comment, follow, trending, dan mention.
-- Push notification memakai Firebase Cloud Messaging.
-- Profil user dengan bio, avatar, banner, follow, unfollow, saved bites, dan liked bites.
-- Upload avatar, banner, dan foto bite ke Supabase Storage.
-- Pencarian lokasi lewat Maps endpoint.
-- Dokumentasi OpenAPI tersedia di `/api/docs`.
+- Autentikasi signup/signin/logout dengan JWT di cookie HTTP-only, login Google ID token, forgot/reset password via email.
+- Feed bite: foto, lokasi, rating, kategori (`street_food`, `cafe`, `fine_dining`, `dessert`, `viral`, `hidden_gems`), review, tab **Semua / Following**.
+- Trending berbasis viral score `views×1 + likes×3 + comments×5` (konsisten dengan functional index di DB).
+- Like, save, komentar, mention `@username` dengan notifikasi + push.
+- Notifikasi real-time via Supabase Realtime + FCM push.
+- Profil: bio, avatar, banner, follow/unfollow, saved & liked bites, grafik aktivitas posting bulanan.
+- Share bite dengan Open Graph preview (route publik `/api/feed/share/:id`).
+- Pencarian lokasi (Nominatim) dengan cache LRU + timeout.
+- Upload avatar/banner/foto ke Supabase Storage (diproses Sharp), file ikut terhapus saat bite dihapus.
 
-## Fitur Teknis
+## Teknis
 
-- **Auth middleware**: route privat memakai middleware `protect` untuk membaca JWT dari cookie atau header `Authorization: Bearer <token>`.
-- **Request validation**: body request divalidasi dengan Zod lewat middleware `validate`, misalnya untuk auth, create bite, update bite, dan update profile.
-- **Rate limiter**: endpoint pencarian lokasi memakai `express-rate-limit` melalui `locationLimiter` agar request Maps tidak terlalu agresif.
-- **Upload middleware**: avatar, banner, dan foto bite diproses lewat Multer, lalu dioptimasi sebelum dikirim ke Supabase Storage.
-- **Storage cleanup**: saat bite dihapus, file foto terkait ikut dihapus dari Supabase Storage.
-- **OpenAPI docs**: dokumentasi API tersedia di `/api/docs`, dengan JSON mentah di `/api/docs.json`.
-- **CORS multi-origin**: origin frontend utama dan tambahan bisa diatur lewat `CLIENT_URL` dan `CLIENT_URLS`.
-- **Push notification**: FCM token user disimpan, lalu dipakai untuk mengirim push notification.
-- **Database notification triggers**: notifikasi like, comment, dan follow dibuat dari trigger SQL.
-- **Mention parser**: backend membaca `@username` dari review bite dan komentar, menyimpan relasi mention, lalu membuat notifikasi mention.
-- **Trending score**: bite trending dihitung dari kombinasi view, like, dan komentar.
-- **Swagger UI asset redirect**: asset Swagger UI diarahkan ke CDN jsDelivr agar dokumentasi bisa dibuka langsung dari backend.
+| Aspek | Implementasi |
+|---|---|
+| Validasi request | Zod via middleware `validate` |
+| Rate limiting | `express-rate-limit` pada endpoint Maps |
+| Counter engagement | Trigger inkremental O(1) (bukan `COUNT(*)`) |
+| Observability | Logger JSON-lines + request-id middleware (`X-Request-Id`) |
+| Migrasi | Runner sendiri dengan tracking tabel `_migrations` |
+| CI | Gitleaks (secret scan) · unit test · integration test dengan Postgres service |
 
 ## Tech Stack
 
-- Node.js dengan ES Modules.
-- Express untuk HTTP server dan routing.
-- PostgreSQL sebagai database utama.
-- Drizzle ORM untuk schema dan query database.
-- Drizzle Kit untuk migration.
-- Supabase untuk storage dan integrasi PostgreSQL/Supabase.
-- Firebase Admin untuk FCM push notification.
-- Nodemailer untuk pengiriman email reset password.
-- Google Auth Library untuk validasi Google ID token.
-- JWT untuk token autentikasi.
-- Zod untuk validasi request body.
-- Multer dan Sharp untuk upload dan pemrosesan gambar.
-
-## Dependency Utama
-
-- `express`: framework API.
-- `drizzle-orm`: ORM PostgreSQL.
-- `pg`: driver PostgreSQL.
-- `dotenv`: load environment variable dari `.env`.
-- `jsonwebtoken`: membuat dan memverifikasi JWT.
-- `bcrypt` / `bcryptjs`: hashing password.
-- `zod`: validasi input.
-- `cors`: konfigurasi CORS frontend.
-- `cookie-parser`: membaca cookie auth.
-- `multer`: menerima upload file.
-- `sharp`: kompresi/pemrosesan gambar.
-- `@supabase/supabase-js`: akses Supabase Storage.
-- `firebase-admin`: kirim FCM push notification.
-- `google-auth-library`: validasi login Google.
-- `nodemailer`: kirim email reset password.
-- `express-rate-limit`: rate limit endpoint tertentu.
-- `node-fetch`: HTTP request dari backend.
+Node.js (ES Modules) · Express 5 · PostgreSQL 16 · Drizzle ORM · Supabase (Storage) · Firebase Admin (FCM) · Nodemailer · Google Auth Library · Zod · Multer + Sharp
 
 ## Struktur Folder
 
 ```txt
 src/
-  config/          Konfigurasi Supabase dan Firebase Admin
-  controllers/     Handler logic untuk auth, feed, profile, notification, maps
-  db/              Drizzle schema dan koneksi database
-  docs/            OpenAPI document
-  middlewares/     Auth, upload, validasi request
+  config/          Konfigurasi Supabase & Firebase Admin
+  controllers/     Lapisan HTTP tipis (parse -> service -> response)
+  services/        Business logic per domain (feedQuery, engagement, comment, biteMutation)
+  db/              Drizzle schema & koneksi
+  docs/            OpenAPI document (/api/docs)
+  middlewares/     Auth (cookie-only), upload, validasi
   routes/          Express routes
   templates/       Template email
-  utils/           Helper email, mention, notification, storage, rate limit
-drizzle/           File migration database
+  utils/           logger, mention, notification/push, storage, scheduler
+scripts/
+  run-migrations.mjs   Migration runner (--seed-history untuk DB lama)
+drizzle/          File migration SQL (0000-0015)
+tests/
+  contract.test.js                  Uji kontrak API tanpa DB
+  integration/                      Uji engagement/notifikasi dengan DB nyata
+  smoke.cookie-auth.mjs             Smoke test alur cookie
+.github/workflows/                 CI: gitleaks + unit + integration (Postgres service)
 ```
-
-## Environment Variable
-
-Buat file `.env` berdasarkan `.env.example`.
-
-```env
-DATABASE_URL=your_database_url_here
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
-JWT_SECRET=your_jwt_secret_here
-CLIENT_URL=http://localhost:5173
-CLIENT_URLS=http://localhost:5173,https://biteyo-fe.vercel.app
-PORT=8000
-EMAIL_USER=your_email_here
-EMAIL_PASS=your_email_password_here
-GOOGLE_CLIENT_ID=your_google_client_id_here
-GOOGLE_REDIRECT_URI=your_google_redirect_uri_here
-GOOGLE_CLIENT_SECRET=your_google_client_secret_here
-FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
-NODE_ENV=development
-```
-
-Untuk production, `FIREBASE_SERVICE_ACCOUNT_KEY` bisa dipakai sebagai JSON service account string agar tidak perlu menyimpan file service account.
 
 ## Menjalankan Project
 
-Install dependency:
-
 ```bash
+# 1. Install dependency
 npm install
+
+# 2. Salin .env.example -> .env, isi nilainya
+cp .env.example .env
+
+# 3. Jalankan migration ke database
+npm run db:migrate
+
+# 4. Development server
+npm run dev        # http://localhost:8000
 ```
 
-Jalankan development server:
+### Environment Variable
+
+| Variabel | Wajib | Keterangan |
+|---|---|---|
+| `DATABASE_URL` | ✅ | Connection string Postgres (Supabase) |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Akses Storage |
+| `JWT_SECRET` | ✅ | Signing token sesi |
+| `CLIENT_URL` | ✅ | URL frontend (untuk redirect & link share) |
+| `CLIENT_URLS` | ➖ | Origin tambahan untuk CORS (comma-separated) |
+| `EMAIL_USER` / `EMAIL_PASS` | ➖ | Kirim email reset password |
+| `GOOGLE_CLIENT_ID` | ➖ | Verifikasi login Google |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` / `FIREBASE_SERVICE_ACCOUNT_KEY` | ➖ | Kredensial FCM (file lokal / string JSON untuk produksi) |
+| `CRON_SECRET` | ➖ | Header auth webhook bot harian |
+| `START_INTERNAL_CRON` | ➖ | `true` = jalankan scheduler in-process (default `false`) |
+| `LOG_LEVEL` | ➖ | `debug\|info\|warn\|error` (default mengikuti NODE_ENV) |
+
+## Testing
 
 ```bash
-npm run dev
+npm test                # contract tests (tanpa DB)
+npm run test:integration  # engagement/notification vs database nyata
+node tests/smoke.cookie-auth.mjs  # smoke alur auth cookie
 ```
 
-Jalankan production server:
-
-```bash
-npm start
-```
-
-Default local API:
-
-```txt
-http://localhost:8000
-```
-
-Dokumentasi API:
-
-```txt
-http://localhost:8000/api/docs
-```
-
-## Database dan Migration
-
-Schema Drizzle ada di `src/db/schema.js`, sedangkan migration SQL ada di folder `drizzle/`.
-
-Migration terbaru menambahkan fitur mention:
-
-- `bite_mentions`
-- `comment_mentions`
-- enum notification `mention`
-
-Pastikan migration dijalankan ke database sebelum fitur mention dipakai di production.
+Integration test butuh `DATABASE_URL` yang sudah di-migrate. Di CI, job `integration`
+menjalankan Postgres 16 sebagai service, apply migration, lalu menjalankan suite.
 
 ## Endpoint Utama
 
-Total API utama: **36 endpoint**.
+Total **39 endpoint** — dokumentasi lengkap & interaktif di [`/api/docs`](https://biteyo-be.vercel.app/api/docs).
 
-- Auth: 7 endpoint
-- Feed: 14 endpoint
-- Profile: 10 endpoint
-- Notifications: 4 endpoint
-- Maps: 1 endpoint
+| Grup | Jumlah | Contoh |
+|---|---|---|
+| Auth | 7 | `POST /api/auth/signup`, `GET /api/auth/me` |
+| Feed | 15 | `GET /api/feed/bites?scope=following`, `POST /api/feed/bites/:id/like`, `GET /api/feed/share/:id` |
+| Profile | 11 | `GET /api/profile/:username`, `GET /api/profile/:username/activity` |
+| Notifications | 5 | `DELETE /api/notifications/:id`, `PATCH /api/notifications/:id/read` |
+| Maps | 1 | `GET /api/maps/location/search` |
 
-Auth:
+## Database & Migration
 
-- `POST /api/auth/signup`
-- `POST /api/auth/signin`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-- `POST /api/auth/forgot-password`
-- `POST /api/auth/reset-password/:token`
-- `POST /api/auth/google`
+Migration SQL di folder `drizzle/` (bernama `0000_...sql` dst.) dijalankan lewat runner
+yang mencatat riwayat di tabel `_migrations`:
 
-Feed:
-
-- `GET /api/feed/categories`
-- `GET /api/feed/bites`
-- `POST /api/feed/bites`
-- `GET /api/feed/bites/search`
-- `GET /api/feed/bites/trending`
-- `GET /api/feed/bites/category/:category`
-- `GET /api/feed/bites/:id`
-- `PATCH /api/feed/bites/:id`
-- `DELETE /api/feed/bites/:id`
-- `POST /api/feed/bites/:id/view`
-- `POST /api/feed/bites/:id/like`
-- `POST /api/feed/bites/:id/save`
-- `GET /api/feed/bites/:id/comments`
-- `POST /api/feed/bites/:id/comments`
-
-Profile:
-
-- `GET /api/profile/:username`
-- `PATCH /api/profile`
-- `DELETE /api/profile`
-- `POST /api/profile/:username/follow`
-- `DELETE /api/profile/:username/follow`
-- `GET /api/profile/:username/bites`
-- `GET /api/profile/:username/liked`
-- `GET /api/profile/saved`
-- `GET /api/profile/liked`
-
-Notifications:
-
-- `GET /api/notifications`
-- `POST /api/notifications/fcm-token`
-- `DELETE /api/notifications/fcm-token`
-- `PATCH /api/notifications/:id/read`
-
-Maps:
-
-- `GET /api/maps/location/search`
-
-## Mention Username
-
-User bisa mention user lain di review bite atau komentar dengan format:
-
-```txt
-@username
+```bash
+npm run db:migrate                       # apply yang belum jalan
+node scripts/run-migrations.mjs --seed-history  # daftarkan riwayat untuk DB lama tanpa eksekusi
 ```
 
-Backend akan:
-
-- membaca username dari teks,
-- mencari user yang valid,
-- menyimpan relasi mention,
-- membuat notification tipe `mention`,
-- mengirim push notification jika user punya FCM token.
-
-Mention duplikat dalam satu teks tidak dibuat dobel, dan mention ke diri sendiri diabaikan.
-
-## Catatan Development
-
-- Semua route utama, kecuali auth tertentu, memakai middleware `protect`.
-- File upload diproses lewat middleware `upload`.
-- Validasi body request memakai Zod.
-- Like, comment, follow, dan mention terhubung ke sistem notifikasi.
-- OpenAPI document bisa diubah di `src/docs/openapi.js`.
+Notifikasi like/comment/follow dibuat oleh **trigger database**
+(`0006_supabase_phase1.sql`, `0013_mention_notification_triggers.sql`);
+counter like/comment disinkronkan trigger inkremental (`0015`).
