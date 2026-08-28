@@ -3,7 +3,6 @@ import { z } from 'zod';
 export const updateProfileSchema = z.object({
     name: z
         .string({ invalid_type_error: 'Nama lengkap harus berupa teks' })
-        .min(1, 'Nama lengkap wajib diisi')
         .max(64, 'Nama terlalu panjang (maksimal 64 karakter)')
         .trim()
         .optional(),
