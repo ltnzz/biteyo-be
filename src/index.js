@@ -17,17 +17,10 @@ import {
     errorHandler,
 } from './middlewares/error.middleware.js';
 import { logger } from './utils/logger.js';
+import { isAllowedOrigin } from './config/cors.js';
+import { csrfProtection } from './middlewares/csrf.middleware.js';
 
 const app = express();
-
-const allowedOrigins = new Set(
-    [
-        'https://biteyo-fe.vercel.app',
-        'http://localhost:5173',
-        process.env.CLIENT_URL,
-        ...(process.env.CLIENT_URLS?.split(',') || []),
-    ].filter(Boolean)
-);
 
 app.use((req, res, next) => {
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
@@ -37,7 +30,7 @@ app.use((req, res, next) => {
 app.use(
     cors({
         origin: (origin, callback) => {
-            if (!origin || allowedOrigins.has(origin)) {
+            if (!origin || isAllowedOrigin(origin)) {
                 callback(null, true);
             } else {
                 callback(new Error('Not allowed by CORS'));
@@ -51,6 +44,8 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+app.use(csrfProtection);
 
 // request-id + access log terstruktur
 app.use((req, res, next) => {

@@ -3,20 +3,11 @@ import { bites, comments, users } from '../db/schema.js';
 import { desc, eq } from 'drizzle-orm';
 import { sendNotificationPush } from '../utils/notification.js';
 import { logger } from '../utils/logger.js';
-import { createMentionsFromText } from '../utils/mention.js';
+import { safeCreateMentionsFromText } from '../utils/mentionSafe.js';
 import {
     ensureBiteExists,
-    getBiteEngagement,
+    refreshBiteEngagement,
 } from './feedQuery.service.js';
-
-const safeCreateMentionsFromText = async (options) => {
-    try {
-        return await createMentionsFromText(options);
-    } catch (error) {
-        logger.error('Create mentions error:', error);
-        return [];
-    }
-};
 
 export const addComment = async ({ userId, biteId, content }) => {
     const bite = await ensureBiteExists(biteId, {
@@ -37,6 +28,7 @@ export const addComment = async ({ userId, biteId, content }) => {
     const [actor] = await db
         .select({
             id: users.id,
+            name: users.name,
             username: users.username,
             avatarUrl: users.avatarUrl,
         })
@@ -53,8 +45,8 @@ export const addComment = async ({ userId, biteId, content }) => {
         message: `${actor?.username || 'Someone'} commented on your ${bite.foodName} post`,
     }).catch((error) => logger.error('Comment push failed:', error));
 
-    const [engagement, mentionedUsers] = await Promise.all([
-        getBiteEngagement(biteId),
+    const [engagement, mentionResult] = await Promise.all([
+        refreshBiteEngagement(biteId),
         safeCreateMentionsFromText({
             text: content,
             sourceType: 'comment',
@@ -67,13 +59,19 @@ export const addComment = async ({ userId, biteId, content }) => {
         }),
     ]);
 
+    if (mentionResult.mentionsFailed) {
+        logger.warn('Comment mentions partially failed', { biteId, commentId: comment.id });
+    }
+
     return {
         comment: {
             ...comment,
             user: actor,
-            mentions: mentionedUsers,
+            mentions: mentionResult.mentions,
+            mentionsFailed: mentionResult.mentionsFailed,
         },
         ...engagement,
+        mentionsFailed: mentionResult.mentionsFailed,
     };
 };
 
@@ -90,6 +88,7 @@ export const listComments = async (biteId) => {
             createdAt: comments.createdAt,
             user: {
                 id: users.id,
+                name: users.name,
                 username: users.username,
                 avatarUrl: users.avatarUrl,
             },

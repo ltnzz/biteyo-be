@@ -18,22 +18,26 @@ export const protect = async (req, res, next) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // Tolak token yang diterbitkan sebelum password terakhir direset
-        if (decoded.type !== 'reset_password') {
-            const [user] = await db
-                .select({ tokenValidAfter: users.tokenValidAfter })
-                .from(users)
-                .where(eq(users.id, decoded.id));
+        // Reset-password token tidak boleh dipakai sebagai session token.
+        // Tahap 1: tolak eksplisit reset_password. Tahap 2 (setelah migrasi): enforce type === 'session'.
+        if (decoded.type === 'reset_password') {
+            return res.status(401).json({
+                message: 'Invalid session token',
+            });
+        }
 
-            if (
-                user?.tokenValidAfter &&
-                decoded.iat * 1000 <
-                    new Date(user.tokenValidAfter).getTime()
-            ) {
-                return res.status(401).json({
-                    message: 'Session expired, please sign in again',
-                });
-            }
+        const [user] = await db
+            .select({ tokenValidAfter: users.tokenValidAfter })
+            .from(users)
+            .where(eq(users.id, decoded.id));
+
+        if (
+            user?.tokenValidAfter &&
+            decoded.iat * 1000 < new Date(user.tokenValidAfter).getTime()
+        ) {
+            return res.status(401).json({
+                message: 'Session expired, please sign in again',
+            });
         }
 
         req.user = decoded;

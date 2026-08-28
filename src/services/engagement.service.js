@@ -6,7 +6,7 @@ import { sendNotificationPush } from '../utils/notification.js';
 import { logger } from '../utils/logger.js';
 import {
     ensureBiteExists,
-    getBiteEngagement,
+    refreshBiteEngagement,
 } from './feedQuery.service.js';
 
 export const toggleLike = async ({ userId, biteId }) => {
@@ -33,7 +33,7 @@ export const toggleLike = async ({ userId, biteId }) => {
         .returning({ id: likes.id });
 
     if (deletedLike) {
-        const engagement = await getBiteEngagement(biteId);
+        const engagement = await refreshBiteEngagement(biteId);
 
         return { status: 200, liked: false, ...engagement };
     }
@@ -47,7 +47,7 @@ export const toggleLike = async ({ userId, biteId }) => {
         .returning();
 
     if (!like) {
-        const engagement = await getBiteEngagement(biteId);
+        const engagement = await refreshBiteEngagement(biteId);
 
         return { status: 200, liked: true, alreadyLiked: true, ...engagement };
     }
@@ -62,7 +62,7 @@ export const toggleLike = async ({ userId, biteId }) => {
         message: `${bite.actorUsername || 'Someone'} liked your ${bite.foodName} post`,
     }).catch((error) => logger.error('Like push failed:', error));
 
-    const engagement = await getBiteEngagement(biteId);
+    const engagement = await refreshBiteEngagement(biteId);
 
     return { status: 201, liked: true, like, ...engagement };
 };

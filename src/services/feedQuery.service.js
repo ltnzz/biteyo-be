@@ -66,6 +66,7 @@ export const getBiteSelect = (userId, extraFields = {}) => ({
 
     user: {
         id: users.id,
+        name: users.name,
         username: users.username,
         avatarUrl: users.avatarUrl,
     },
@@ -82,10 +83,32 @@ export const normalizeBiteViewerFlags = (bite) => ({
 });
 
 /**
- * Recompute isTrending secara atomik berdasarkan counter terkini
- * dan kembalikan engagement terbaru.
+ * Read-only: kembalikan engagement terbaru tanpa melakukan write.
+ * Dipakai untuk endpoint read murni agar tidak mengubah updatedAt.
  */
-export const getBiteEngagement = async (biteId) => {
+export const readBiteEngagement = async (biteId) => {
+    const [row] = await db
+        .select({
+            viewsCount: bites.viewsCount,
+            likesCount: bites.likesCount,
+            commentsCount: bites.commentsCount,
+        })
+        .from(bites)
+        .where(eq(bites.id, biteId))
+        .limit(1);
+
+    if (!row) return null;
+
+    const viralScore = calculateViralScore(row);
+    const isTrending = isTrendingScore(viralScore);
+    return { ...row, viralScore, isTrending };
+};
+
+/**
+ * Refresh isTrending secara atomik berdasarkan counter terkini.
+ * Dipanggil hanya setelah counter berubah (like, unlike, comment, view).
+ */
+export const refreshBiteEngagement = async (biteId) => {
     const [updated] = await db
         .update(bites)
         .set({
@@ -99,20 +122,16 @@ export const getBiteEngagement = async (biteId) => {
             commentsCount: bites.commentsCount,
         });
 
-    if (!updated) {
-        return null;
-    }
+    if (!updated) return null;
 
-    const { viewsCount, likesCount, commentsCount } = updated;
-    const viralScore = calculateViralScore({
-        viewsCount,
-        likesCount,
-        commentsCount,
-    });
+    const viralScore = calculateViralScore(updated);
     const isTrending = isTrendingScore(viralScore);
-
-    return { viewsCount, likesCount, commentsCount, viralScore, isTrending };
+    return { ...updated, viralScore, isTrending };
 };
+
+// Backward compat: getBiteEngagement sekarang read-only (tanpa write)
+// untuk mencegah write amplification pada pemanggilan yang hanya butuh read.
+export const getBiteEngagement = readBiteEngagement;
 
 export const ensureBiteExists = async (biteId, selectFields = { id: bites.id }) => {
     const [bite] = await db.select(selectFields).from(bites).where(eq(bites.id, biteId));
@@ -125,23 +144,27 @@ export const ensureBiteExists = async (biteId, selectFields = { id: bites.id }) 
 };
 
 export const recordView = async (biteId) => {
-    const [viewedBite] = await db
+    const [updated] = await db
         .update(bites)
         .set({
             viewsCount: sql`${bites.viewsCount} + 1`,
+            isTrending: getTrendingStatusSql(),
             updatedAt: new Date(),
         })
         .where(eq(bites.id, biteId))
         .returning({
-            id: bites.id,
             viewsCount: bites.viewsCount,
+            likesCount: bites.likesCount,
+            commentsCount: bites.commentsCount,
         });
 
-    if (!viewedBite) {
+    if (!updated) {
         throw new AppError('Bite not found', 404);
     }
 
-    return getBiteEngagement(biteId);
+    const viralScore = calculateViralScore(updated);
+    const isTrending = isTrendingScore(viralScore);
+    return { ...updated, viralScore, isTrending };
 };
 
 const baseListQuery = (userId) =>

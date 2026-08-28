@@ -38,14 +38,17 @@ export const searchLocation = async (req, res) => {
     try {
         const { q } = req.query;
 
-        if (!q) return res.json([]);
+        if (!q || typeof q !== 'string' || !q.trim()) return res.json([]);
+        if (q.trim().length > 200) {
+            return res.status(400).json({ message: 'Query too long' });
+        }
 
         const key = q.toLowerCase().trim();
         const cached = cacheGet(key);
 
         if (cached) return res.json(cached);
 
-        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`;
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q.trim())}`;
 
         const response = await fetch(url, {
             // Nominatim mensyaratkan UA yang mengidentifikasi aplikasi
@@ -55,14 +58,29 @@ export const searchLocation = async (req, res) => {
             signal: AbortSignal.timeout(5000),
         });
 
+        if (!response.ok) {
+            logger.warn('Nominatim upstream error', {
+                status: response.status,
+                query: q,
+            });
+            return res.status(502).json({ message: 'Location service unavailable' });
+        }
+
         const data = await response.json();
 
-        const result = data.map((item) => ({
-            placeId: item.place_id,
-            name: item.display_name,
-            lat: parseFloat(item.lat),
-            lng: parseFloat(item.lon),
-        }));
+        if (!Array.isArray(data)) {
+            logger.warn('Nominatim unexpected response shape', { query: q });
+            return res.status(502).json({ message: 'Location service invalid response' });
+        }
+
+        const result = data
+            .filter((item) => item && item.place_id && item.display_name && item.lat && item.lon)
+            .map((item) => ({
+                placeId: item.place_id,
+                name: item.display_name,
+                lat: parseFloat(item.lat),
+                lng: parseFloat(item.lon),
+            }));
 
         cacheSet(key, result);
 

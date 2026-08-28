@@ -34,6 +34,12 @@ export const errorHandler = (err, req, res, _next) => {
     ) {
         statusCode = 400;
         message = 'Only images are allowed';
+    } else if (
+        typeof err.message === 'string' &&
+        err.message === 'Not allowed by CORS'
+    ) {
+        statusCode = 403;
+        message = 'Forbidden: invalid origin';
     }
 
     if (statusCode >= 500) {

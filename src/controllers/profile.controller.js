@@ -2,12 +2,19 @@ import { eq, ne, and, desc, ilike, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { db } from '../db/index.js';
 import { users, bites, follows, likes, saved } from '../db/schema.js';
-import { sendNotificationPush } from '../utils/notification.js';
 import {
     getViralScoreSqlExpr,
     getTrendingStatusSqlExpr,
 } from '../utils/viral.js';
 import { logger } from '../utils/logger.js';
+import { getTokenCookieOptions } from '../utils/cookie.js';
+import { deleteStorageObject } from '../utils/storage.js';
+import { parsePagination } from '../utils/pagination.js';
+import {
+    followUserService,
+    unfollowUserService,
+    getFollowStats,
+} from '../services/follow.service.js';
 
 const viewerLikes = alias(likes, 'viewer_likes');
 const viewerSaved = alias(saved, 'viewer_saved');
@@ -66,22 +73,6 @@ const normalizeBiteViewerFlags = (bite) => ({
     isLiked: Boolean(bite.isLiked),
     isSaved: Boolean(bite.isSaved),
 });
-
-const getFollowStats = async ({ targetUserId, actorUserId }) => {
-    const [[{ targetFollowersCount }], [{ actorFollowingCount }]] =
-        await Promise.all([
-            db
-                .select({ targetFollowersCount: sql`count(*)::int` })
-                .from(follows)
-                .where(eq(follows.followingId, targetUserId)),
-            db
-                .select({ actorFollowingCount: sql`count(*)::int` })
-                .from(follows)
-                .where(eq(follows.followerId, actorUserId)),
-        ]);
-
-    return { targetFollowersCount, actorFollowingCount };
-};
 
 /**
  * Aktivitas posting bulanan user untuk grafik profil.
@@ -225,7 +216,7 @@ export const getMentionSuggestions = async (req, res) => {
     try {
         const currentUserId = req.user.id;
         const query = getMentionQuery(req.query.q || req.query.search || '');
-        const limit = Math.min(Math.max(parseInt(req.query.limit) || 8, 1), 20);
+        const { limit } = parsePagination(req.query, { defaultLimit: 8, maxLimit: 20 });
 
         const filters = [ne(users.id, currentUserId)];
 
@@ -306,11 +297,27 @@ export const updateProfile = async (req, res) => {
         if (avatarUrl) updateData.avatarUrl = avatarUrl;
         if (bannerUrl) updateData.bannerUrl = bannerUrl;
 
-        const [updatedUser] = await db
-            .update(users)
-            .set(updateData)
-            .where(eq(users.id, userId))
-            .returning();
+        let updatedUser;
+        try {
+            [updatedUser] = await db
+                .update(users)
+                .set(updateData)
+                .where(eq(users.id, userId))
+                .returning();
+        } catch (dbError) {
+            // Inline compensation for orphan avatar/banner when DB fails after upload
+            for (const url of [avatarUrl, bannerUrl].filter(Boolean)) {
+                try {
+                    await deleteStorageObject(url);
+                } catch (cleanupError) {
+                    logger.error('Cleanup orphan profile media failed:', {
+                        url,
+                        error: cleanupError?.message,
+                    });
+                }
+            }
+            throw dbError;
+        }
 
         const { password, ...safeUser } = updatedUser;
 
@@ -328,76 +335,29 @@ export const updateProfile = async (req, res) => {
 
 export const followUser = async (req, res) => {
     try {
-        const { username } = req.params;
-        const currentUserId = req.user.id;
+        const result = await followUserService({
+            targetUsername: req.params.username,
+            currentUserId: req.user.id,
+        });
 
-        const [targetUser] = await db
-            .select({
-                id: users.id,
-                username: users.username,
-                avatarUrl: users.avatarUrl,
-            })
-            .from(users)
-            .where(eq(users.username, username));
-
-        if (!targetUser) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        if (targetUser.id === currentUserId) {
-            return res.status(400).json({
-                message: 'You cannot follow yourself',
-            });
-        }
-
-        const [follow] = await db
-            .insert(follows)
-            .values({
-                followerId: currentUserId,
-                followingId: targetUser.id,
-            })
-            .onConflictDoNothing({
-                target: [follows.followerId, follows.followingId],
-            })
-            .returning();
-
-        if (!follow) {
-            const followStats = await getFollowStats({
-                targetUserId: targetUser.id,
-                actorUserId: currentUserId,
-            });
-
+        if (result.alreadyFollowing) {
             return res.status(200).json({
                 message: 'Already following user',
                 following: true,
-                ...followStats,
+                ...result.followStats,
             });
         }
-
-        const [actor] = await db
-            .select({ username: users.username })
-            .from(users)
-            .where(eq(users.id, currentUserId));
-
-        await sendNotificationPush({
-            toUserId: targetUser.id,
-            fromUserId: currentUserId,
-            type: 'follow',
-            message: `${actor?.username || 'Someone'} started following you`,
-        });
-
-        const followStats = await getFollowStats({
-            targetUserId: targetUser.id,
-            actorUserId: currentUserId,
-        });
 
         return res.status(201).json({
             message: 'User followed',
             following: true,
-            follow,
-            ...followStats,
+            follow: result.follow,
+            ...result.followStats,
         });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ message: error.message });
+        }
         logger.error('Follow user error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
@@ -405,50 +365,20 @@ export const followUser = async (req, res) => {
 
 export const unfollowUser = async (req, res) => {
     try {
-        const { username } = req.params;
-        const currentUserId = req.user.id;
-
-        const [targetUser] = await db
-            .select({
-                id: users.id,
-                username: users.username,
-            })
-            .from(users)
-            .where(eq(users.username, username));
-
-        if (!targetUser) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        if (targetUser.id === currentUserId) {
-            return res.status(400).json({
-                message: 'You cannot unfollow yourself',
-            });
-        }
-
-        const [deletedFollow] = await db
-            .delete(follows)
-            .where(
-                and(
-                    eq(follows.followerId, currentUserId),
-                    eq(follows.followingId, targetUser.id)
-                )
-            )
-            .returning({ id: follows.id });
-
-        const followStats = await getFollowStats({
-            targetUserId: targetUser.id,
-            actorUserId: currentUserId,
+        const result = await unfollowUserService({
+            targetUsername: req.params.username,
+            currentUserId: req.user.id,
         });
 
         return res.status(200).json({
-            message: deletedFollow
-                ? 'User unfollowed'
-                : 'User is not followed',
+            message: result.deletedFollow ? 'User unfollowed' : 'User is not followed',
             following: false,
-            ...followStats,
+            ...result.followStats,
         });
     } catch (error) {
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ message: error.message });
+        }
         logger.error('Unfollow user error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
@@ -471,7 +401,7 @@ export const deleteAccount = async (req, res) => {
 
         await db.delete(users).where(eq(users.id, userId));
 
-        res.clearCookie('token');
+        res.clearCookie('token', getTokenCookieOptions(req));
 
         return res.status(200).json({
             message: 'Account deleted successfully',
@@ -489,9 +419,7 @@ export const getUserBites = async (req, res) => {
         const { username } = req.params;
         const currentUserId = req.user.id;
 
-        const page = Math.max(parseInt(req.query.page) || 1, 1);
-        const limit = Math.min(parseInt(req.query.limit) || 12, 50);
-        const offset = (page - 1) * limit;
+        const { page, limit, offset } = parsePagination(req.query);
 
         const [user] = await db
             .select({ id: users.id })
@@ -548,9 +476,7 @@ export const getSavedBites = async (req, res) => {
     try {
         const currentUserId = req.user.id;
 
-        const page = Math.max(parseInt(req.query.page) || 1, 1);
-        const limit = Math.min(parseInt(req.query.limit) || 12, 50);
-        const offset = (page - 1) * limit;
+        const { page, limit, offset } = parsePagination(req.query);
 
         const savedBites = await db
             .select({
@@ -625,8 +551,7 @@ const getLikedBitesByUserId = async ({
 
 const getLikedBitesResponse = async ({ req, res, targetUserId }) => {
     const currentUserId = req.user.id;
-    const page = Math.max(parseInt(req.query.page) || 1, 1);
-    const limit = Math.min(parseInt(req.query.limit) || 12, 50);
+    const { page, limit } = parsePagination(req.query);
     const likedBites = await getLikedBitesByUserId({
         targetUserId,
         currentUserId,

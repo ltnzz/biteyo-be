@@ -64,6 +64,7 @@ describe('API contract', () => {
     describe('protected routes without token', () => {
         it.each([
             ['GET', '/api/feed/bites'],
+            ['GET', '/api/feed/status/some-bite-id'],
             ['GET', '/api/feed/categories'],
             ['GET', '/api/auth/me'],
             ['GET', '/api/notifications/'],
@@ -83,6 +84,20 @@ describe('API contract', () => {
             );
 
             expect(res.status).toBe(401);
+        });
+    });
+
+    describe('generateBiteId util', () => {
+        it('generates 10-character alphanumeric unique ID', async () => {
+            const { generateBiteId } = await import('../src/utils/id.js');
+
+            const id1 = generateBiteId();
+            const id2 = generateBiteId();
+
+            expect(id1).toHaveLength(10);
+            expect(id2).toHaveLength(10);
+            expect(id1).toMatch(/^[a-zA-Z0-9]{10}$/);
+            expect(id1).not.toBe(id2);
         });
     });
 

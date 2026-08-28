@@ -13,7 +13,7 @@ getProfileActivity,
     getMentionSuggestions,
 } from '../controllers/profile.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
-import { upload } from '../middlewares/upload.middleware.js';
+import { parseMultipart, uploadSupabaseFiles } from '../middlewares/upload.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import { updateProfileSchema } from '../middlewares/validations/profile.validation.js';
 
@@ -35,7 +35,7 @@ router.get('/:username/likes', protect, getUserLikedBites);
 router.patch(
     '/',
     protect,
-    upload.fields([
+    parseMultipart([
         { name: 'avatar', maxCount: 1 },
         { name: 'profileImage', maxCount: 1 },
         { name: 'banner', maxCount: 1 },
@@ -43,6 +43,7 @@ router.patch(
         { name: 'cover', maxCount: 1 },
     ]),
     validate(updateProfileSchema),
+    uploadSupabaseFiles,
     updateProfile
 );
 router.delete('/', protect, deleteAccount);

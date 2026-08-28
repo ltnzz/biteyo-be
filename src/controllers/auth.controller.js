@@ -9,6 +9,7 @@ import { sendEmail } from '../utils/email.js';
 import { resetPasswordTemplate } from '../templates/auth.email.template.js';
 import { OAuth2Client } from 'google-auth-library';
 import { logger } from '../utils/logger.js';
+import { getTokenCookieOptions } from '../utils/cookie.js';
 
 const googleClient = new OAuth2Client();
 const loginTokenMaxAgeDays = Number.parseInt(
@@ -21,24 +22,14 @@ const LOGIN_TOKEN_MAX_AGE_DAYS =
         : loginTokenMaxAgeDays;
 
 const generateToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET, {
+    return jwt.sign({ id, type: 'session' }, process.env.JWT_SECRET, {
         expiresIn: `${LOGIN_TOKEN_MAX_AGE_DAYS}d`,
     });
 };
 
 const setTokenCookie = (req, res, token) => {
-    // Deteksi https dari request, bukan NODE_ENV, agar cookie lintas-site
-    // (FE & BE beda subdomain/public suffix) tetap terkirim di produksi:
-    // SameSite=None wajib dipasangkan Secure, kalau tidak browser menolaknya.
-    const isHttps =
-        req.secure ||
-        req.protocol === 'https' ||
-        (req.headers['x-forwarded-proto'] || '').includes('https');
-
     res.cookie('token', token, {
-        httpOnly: true,
-        secure: isHttps,
-        sameSite: isHttps ? 'none' : 'lax',
+        ...getTokenCookieOptions(req),
         maxAge: LOGIN_TOKEN_MAX_AGE_DAYS * 24 * 60 * 60 * 1000,
     });
 };
@@ -58,8 +49,18 @@ const generateUniqueUsername = async (name, email) => {
 
     if (!existing) return base;
 
-    // Tambah suffix random 4 digit jika username sudah dipakai
-    return base.slice(0, 16) + '_' + Math.floor(1000 + Math.random() * 9000);
+    // Coba beberapa suffix kriptografis untuk hindari collision (TOCTOU)
+    for (let i = 0; i < 5; i++) {
+        const suffix = crypto.randomInt(1000, 10000);
+        const candidate = base.slice(0, 16) + '_' + suffix;
+        const [hit] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.username, candidate));
+        if (!hit) return candidate;
+    }
+
+    return base.slice(0, 12) + '_' + crypto.randomBytes(2).toString('hex');
 };
 
 export const signUp = async (req, res) => {
@@ -103,7 +104,6 @@ export const signUp = async (req, res) => {
 
         return res.status(201).json({
             message: 'Signup success',
-            token,
             user: safeUser,
         });
     } catch (error) {
@@ -148,7 +148,6 @@ export const signIn = async (req, res) => {
 
         return res.status(200).json({
             message: 'Login success',
-            token,
             user: safeUser,
         });
     } catch (error) {
@@ -160,9 +159,9 @@ export const signIn = async (req, res) => {
     }
 };
 
-export const logout = async (_req, res) => {
+export const logout = async (req, res) => {
     try {
-        res.clearCookie('token');
+        res.clearCookie('token', getTokenCookieOptions(req));
 
         return res.status(200).json({
             message: 'Logout success',
@@ -341,24 +340,40 @@ export const googleSignIn = async (req, res) => {
             .where(eq(users.email, email));
 
         if (!user) {
-            // User baru — buat akun otomatis
-            const username = await generateUniqueUsername(name, email);
-
+            // User baru — buat akun otomatis dengan retry untuk race unique constraint
             const randomPassword = await bcrypt.hash(
                 crypto.randomBytes(32).toString('hex'),
                 10
             );
 
-            [user] = await db
-                .insert(users)
-                .values({
-                    name: name || null,
-                    username,
-                    email,
-                    password: randomPassword,
-                    avatarUrl: picture || null,
-                })
-                .returning();
+            let lastError;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const username = await generateUniqueUsername(name, email);
+                try {
+                    [user] = await db
+                        .insert(users)
+                        .values({
+                            name: name || null,
+                            username,
+                            email,
+                            password: randomPassword,
+                            avatarUrl: picture || null,
+                        })
+                        .returning();
+                    lastError = null;
+                    break;
+                } catch (err) {
+                    const isUniqueViolation =
+                        err?.code === '23505' ||
+                        /duplicate key|unique/i.test(err?.message || '');
+                    if (isUniqueViolation && attempt < 2) {
+                        lastError = err;
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+            if (!user && lastError) throw lastError;
         } else if (!user.avatarUrl && picture) {
             // Update avatar jika belum punya
             [user] = await db
@@ -375,7 +390,6 @@ export const googleSignIn = async (req, res) => {
 
         return res.status(200).json({
             message: 'Google login success',
-            token,
             user: safeUser,
         });
     } catch (error) {

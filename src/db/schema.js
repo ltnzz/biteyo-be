@@ -7,6 +7,7 @@ import {
     timestamp,
     boolean,
     decimal,
+    date,
     pgEnum,
     uniqueIndex,
     index,
@@ -291,3 +292,11 @@ export const fcmTokens = pgTable(
         index('fcm_tokens_user_id_idx').on(table.userId),
     ]
 );
+
+export const botDailyJobs = pgTable('bot_daily_jobs', {
+    jobDate: date('job_date').primaryKey(),
+    biteId: varchar('bite_id', { length: 36 }).references(() => bites.id, {
+        onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+});

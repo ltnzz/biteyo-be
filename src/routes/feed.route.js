@@ -16,12 +16,13 @@ import {
     recordBiteView,
 } from '../controllers/feed.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
-import { upload } from '../middlewares/upload.middleware.js';
+import { parseMultipart, uploadSupabaseFiles } from '../middlewares/upload.middleware.js';
 import { validate } from '../middlewares/validate.middleware.js';
 import {
     createBiteSchema,
     updateBiteSchema,
 } from '../middlewares/validations/feed.validation.js';
+import { createCommentSchema } from '../middlewares/validations/comment.validation.js';
 import { sharePreview } from '../controllers/share.controller.js';
 import { getTrendingKeywords } from '../controllers/feed.controller.js';
 
@@ -41,11 +42,12 @@ router.get('/bites/category/:category', protect, getBitesByCategory);
 router.post(
     '/bites',
     protect,
-    upload.fields([
+    parseMultipart([
         { name: 'photo', maxCount: 1 },
         { name: 'image', maxCount: 1 },
     ]),
     validate(createBiteSchema),
+    uploadSupabaseFiles,
     createBite
 );
 
@@ -57,6 +59,11 @@ router.post(['/bites/:id/view', '/status/:id/view'], protect, recordBiteView);
 router.post(['/bites/:id/like', '/status/:id/like'], protect, toggleLikeBite);
 router.post(['/bites/:id/save', '/status/:id/save'], protect, toggleSaveBite);
 router.get(['/bites/:id/comments', '/status/:id/comments'], protect, getBiteComments);
-router.post(['/bites/:id/comments', '/status/:id/comments'], protect, createComment);
+router.post(
+    ['/bites/:id/comments', '/status/:id/comments'],
+    protect,
+    validate(createCommentSchema),
+    createComment
+);
 
 export default router;

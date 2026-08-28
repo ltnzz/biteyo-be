@@ -38,7 +38,7 @@ const processImageBuffer = async (file) => {
     return { buffer: processed.data, mimetype: 'image/jpeg' };
 };
 
-const uploadSupabaseFiles = async (req, _res, next) => {
+export const uploadSupabaseFiles = async (req, _res, next) => {
     try {
         if (!req.files) {
             return next();
@@ -74,6 +74,10 @@ const uploadSupabaseFiles = async (req, _res, next) => {
     }
 };
 
+export const parseMultipart = (fields) => multerUpload.fields(fields);
+
 export const upload = {
     fields: (fields) => [multerUpload.fields(fields), uploadSupabaseFiles],
+    parse: parseMultipart,
+    upload: uploadSupabaseFiles,
 };

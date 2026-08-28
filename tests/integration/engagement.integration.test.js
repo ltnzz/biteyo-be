@@ -39,7 +39,19 @@ const signupUser = async (username) => {
         throw new Error(`signup ${username} gagal: ${res.status}`);
     }
 
-    return { email, token: res.body.token };
+    const setCookie = res.headers['set-cookie'];
+    const tokenCookie = Array.isArray(setCookie)
+        ? setCookie.find((c) => c.startsWith('token='))
+        : typeof setCookie === 'string' && setCookie.startsWith('token=')
+          ? setCookie
+          : null;
+    const token = tokenCookie ? tokenCookie.split(';')[0].split('=')[1] : null;
+
+    if (!token) {
+        throw new Error(`signup ${username} gagal: token cookie tidak ditemukan`);
+    }
+
+    return { email, token, cookie: tokenCookie.split(';')[0] };
 };
 
 const dbBiteState = async (biteId) => {
