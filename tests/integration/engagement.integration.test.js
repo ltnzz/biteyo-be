@@ -15,6 +15,7 @@ import request from 'supertest';
 import pg from 'pg';
 
 import app from '../../src/index.js';
+import { generateBiteId } from '../../src/utils/id.js';
 
 const TEST_EMAIL_PREFIX = 'integration-test-';
 
@@ -85,16 +86,17 @@ maybeDescribe('integration: engagement & notification', () => {
             owner.email,
         ]);
 
+        const newBiteId = generateBiteId();
         const { rows } = await query(
             `insert into bites (
-                user_id, food_name, location_name, review, rating,
+                id, user_id, food_name, location_name, review, rating,
                 photo_url, category, created_at
             ) values (
-                $1, 'Test Sate', 'Jakarta', 'enak sekali', 5,
+                $2, $1, 'Test Sate', 'Jakarta', 'enak sekali', 5,
                 'https://example.com/test.jpg', 'street_food', now()
             )
             returning id`,
-            [ownerIdRow.rows[0].id],
+            [ownerIdRow.rows[0].id, newBiteId],
         );
 
         biteId = rows[0].id;
