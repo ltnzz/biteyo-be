@@ -263,8 +263,11 @@ export const updateProfile = async (req, res) => {
             req.files?.bannerImage?.[0]?.path ||
             req.files?.cover?.[0]?.path;
 
+        const trimmedNameForCheck = typeof name === 'string' ? name.trim() : '';
+        const hasNameUpdate = typeof name === 'string' ? trimmedNameForCheck.length > 0 : false;
+
         // cek jika tidak ada field yang diupdate sama sekali
-        if (name === undefined && !username && bio === undefined && !avatarUrl && !bannerUrl) {
+        if (!hasNameUpdate && !username && bio === undefined && !avatarUrl && !bannerUrl) {
             return res.status(400).json({
                 message: 'No fields to update',
             });
@@ -285,12 +288,8 @@ export const updateProfile = async (req, res) => {
         }
 
         const updateData = { updatedAt: new Date() };
-        if (name !== undefined) {
-            const trimmedName = typeof name === 'string' ? name.trim() : '';
-            if (!trimmedName) {
-                return res.status(400).json({ message: 'Nama lengkap wajib diisi' });
-            }
-            updateData.name = trimmedName;
+        if (hasNameUpdate) {
+            updateData.name = trimmedNameForCheck;
         }
         if (username) updateData.username = username;
         if (bio !== undefined) updateData.bio = bio;
