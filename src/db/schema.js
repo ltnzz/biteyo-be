@@ -12,6 +12,8 @@ import {
     index,
 } from 'drizzle-orm/pg-core';
 
+import { generateBiteId } from '../utils/id.js';
+
 export const BITE_CATEGORIES = [
     'street_food',
     'cafe',
@@ -33,6 +35,7 @@ export const notifTypeEnum = pgEnum('notif_type', [
 
 export const users = pgTable('users', {
     id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 64 }),
     username: varchar('username', { length: 30 }).notNull().unique(),
     email: varchar('email', { length: 64 }).notNull().unique(),
     password: varchar('password', { length: 64 }).notNull(),
@@ -75,7 +78,9 @@ export const follows = pgTable(
 export const bites = pgTable(
     'bites',
     {
-        id: uuid('id').primaryKey().defaultRandom(),
+        id: varchar('id', { length: 36 })
+            .primaryKey()
+            .$defaultFn(() => generateBiteId()),
         userId: uuid('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -114,7 +119,7 @@ export const likes = pgTable(
             .references(() => users.id, {
                 onDelete: 'cascade',
             }),
-        biteId: uuid('bite_id')
+        biteId: varchar('bite_id', { length: 36 })
             .notNull()
             .references(() => bites.id, {
                 onDelete: 'cascade',
@@ -137,7 +142,7 @@ export const comments = pgTable(
             .references(() => users.id, {
                 onDelete: 'cascade',
             }),
-        biteId: uuid('bite_id')
+        biteId: varchar('bite_id', { length: 36 })
             .notNull()
             .references(() => bites.id, {
                 onDelete: 'cascade',
@@ -163,7 +168,7 @@ export const saved = pgTable(
             .references(() => users.id, {
                 onDelete: 'cascade',
             }),
-        biteId: uuid('bite_id')
+        biteId: varchar('bite_id', { length: 36 })
             .notNull()
             .references(() => bites.id, {
                 onDelete: 'cascade',
@@ -181,7 +186,7 @@ export const biteMentions = pgTable(
     'bite_mentions',
     {
         id: uuid('id').primaryKey().defaultRandom(),
-        biteId: uuid('bite_id')
+        biteId: varchar('bite_id', { length: 36 })
             .notNull()
             .references(() => bites.id, {
                 onDelete: 'cascade',
@@ -215,7 +220,7 @@ export const commentMentions = pgTable(
             .references(() => comments.id, {
                 onDelete: 'cascade',
             }),
-        biteId: uuid('bite_id')
+        biteId: varchar('bite_id', { length: 36 })
             .notNull()
             .references(() => bites.id, {
                 onDelete: 'cascade',
@@ -253,7 +258,7 @@ export const notifications = pgTable(
             onDelete: 'set null',
         }),
         type: notifTypeEnum('type').notNull(),
-        biteId: uuid('bite_id').references(() => bites.id, {
+        biteId: varchar('bite_id', { length: 36 }).references(() => bites.id, {
             onDelete: 'cascade',
         }),
         message: varchar('message', { length: 300 }),
