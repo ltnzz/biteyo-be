@@ -1,4 +1,6 @@
-import { BITE_CATEGORIES } from '../db/schema.js';
+import { db } from '../db/index.js';
+import { BITE_CATEGORIES, bites } from '../db/schema.js';
+import { sql } from 'drizzle-orm';
 import {
     findBiteById,
     getTrendingKeywords as fetchTrendingKeywords,
@@ -111,16 +113,31 @@ export const searchBites = async (req, res) =>
     });
 
 export const getBiteCategories = async (req, res) =>
-    handle(res, async () => ({
-        status: 200,
-        body: {
-            message: 'success',
-            data: BITE_CATEGORIES.map((value) => ({
-                value,
-                label: categoryLabels[value],
-            })),
-        },
-    }));
+    handle(res, async () => {
+        const counts = await db
+            .select({
+                category: bites.category,
+                count: sql`count(*)`,
+            })
+            .from(bites)
+            .groupBy(bites.category);
+
+        const countMap = Object.fromEntries(
+            counts.map((c) => [c.category, Number(c.count)])
+        );
+
+        return {
+            status: 200,
+            body: {
+                message: 'success',
+                data: BITE_CATEGORIES.map((value) => ({
+                    value,
+                    label: categoryLabels[value],
+                    count: countMap[value] || 0,
+                })),
+            },
+        };
+    });
 
 // Publik: dipakai widget trending & dropdown search
 export const getTrendingKeywords = async (req, res) =>

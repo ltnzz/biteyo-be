@@ -64,7 +64,7 @@ const generateUniqueUsername = async (name, email) => {
 
 export const signUp = async (req, res) => {
     try {
-        const { username, email, password, confirm_password } = req.body;
+        const { name, username, email, password, confirm_password } = req.body;
 
         if (password !== confirm_password) {
             return res.status(400).json({
@@ -88,6 +88,7 @@ export const signUp = async (req, res) => {
         const newUser = await db
             .insert(users)
             .values({
+                name: name ? name.trim() : username,
                 username,
                 email,
                 password: hashedPassword,
@@ -351,6 +352,7 @@ export const googleSignIn = async (req, res) => {
             [user] = await db
                 .insert(users)
                 .values({
+                    name: name || null,
                     username,
                     email,
                     password: randomPassword,

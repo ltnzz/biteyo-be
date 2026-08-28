@@ -29,6 +29,7 @@ const router = express.Router();
 
 // Publik: dipakai crawler (WA/X) untuk membaca meta OG saat link dibagikan
 router.get('/share/:id', sharePreview);
+router.get('/share/status/:id', sharePreview);
 // Publik: widget trending & saran keyword di search
 router.get('/trending-keywords', getTrendingKeywords);
 
@@ -47,13 +48,15 @@ router.post(
     validate(createBiteSchema),
     createBite
 );
-router.get('/bites/:id', protect, getBiteById);
-router.patch('/bites/:id', protect, validate(updateBiteSchema), updateBite);
-router.delete('/bites/:id', protect, deleteBite);
-router.post('/bites/:id/view', protect, recordBiteView);
-router.post('/bites/:id/like', protect, toggleLikeBite);
-router.post('/bites/:id/save', protect, toggleSaveBite);
-router.get('/bites/:id/comments', protect, getBiteComments);
-router.post('/bites/:id/comments', protect, createComment);
+
+// Detail, update, delete bite (mendukung rute /status/:id dan /bites/:id)
+router.get(['/bites/:id', '/status/:id'], protect, getBiteById);
+router.patch(['/bites/:id', '/status/:id'], protect, validate(updateBiteSchema), updateBite);
+router.delete(['/bites/:id', '/status/:id'], protect, deleteBite);
+router.post(['/bites/:id/view', '/status/:id/view'], protect, recordBiteView);
+router.post(['/bites/:id/like', '/status/:id/like'], protect, toggleLikeBite);
+router.post(['/bites/:id/save', '/status/:id/save'], protect, toggleSaveBite);
+router.get(['/bites/:id/comments', '/status/:id/comments'], protect, getBiteComments);
+router.post(['/bites/:id/comments', '/status/:id/comments'], protect, createComment);
 
 export default router;

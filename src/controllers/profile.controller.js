@@ -51,6 +51,7 @@ const getBiteSelect = (currentUserId, extraFields = {}) => ({
 
     user: {
         id: users.id,
+        name: users.name,
         username: users.username,
         avatarUrl: users.avatarUrl,
     },
@@ -143,6 +144,7 @@ export const getProfile = async (req, res) => {
         const [user] = await db
             .select({
                 id: users.id,
+                name: users.name,
                 username: users.username,
                 bio: users.bio,
                 avatarUrl: users.avatarUrl,
@@ -234,6 +236,7 @@ export const getMentionSuggestions = async (req, res) => {
         const mentionUsers = await db
             .select({
                 id: users.id,
+                name: users.name,
                 username: users.username,
                 avatarUrl: users.avatarUrl,
                 bio: users.bio,
@@ -261,7 +264,7 @@ export const getMentionSuggestions = async (req, res) => {
 export const updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { username, bio } = req.body;
+        const { name, username, bio } = req.body;
         const avatarUrl =
             req.files?.avatar?.[0]?.path || req.files?.profileImage?.[0]?.path;
         const bannerUrl =
@@ -270,7 +273,7 @@ export const updateProfile = async (req, res) => {
             req.files?.cover?.[0]?.path;
 
         // cek jika tidak ada field yang diupdate sama sekali
-        if (!username && bio === undefined && !avatarUrl && !bannerUrl) {
+        if (name === undefined && !username && bio === undefined && !avatarUrl && !bannerUrl) {
             return res.status(400).json({
                 message: 'No fields to update',
             });
@@ -291,6 +294,13 @@ export const updateProfile = async (req, res) => {
         }
 
         const updateData = { updatedAt: new Date() };
+        if (name !== undefined) {
+            const trimmedName = typeof name === 'string' ? name.trim() : '';
+            if (!trimmedName) {
+                return res.status(400).json({ message: 'Nama lengkap wajib diisi' });
+            }
+            updateData.name = trimmedName;
+        }
         if (username) updateData.username = username;
         if (bio !== undefined) updateData.bio = bio;
         if (avatarUrl) updateData.avatarUrl = avatarUrl;

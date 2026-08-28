@@ -34,6 +34,7 @@ export const executeDailyUpload = async () => {
         const [createdUser] = await db
             .insert(users)
             .values({
+                name: 'Biteyo Bot',
                 username: 'biteyo_bot',
                 email: 'bot@biteyo.com',
                 password: hashedPassword,
@@ -139,13 +140,21 @@ export const executeDailyUpload = async () => {
 
 /**
  * Express Route controller to trigger the daily upload webhook.
- * Secret HANYA diterima via header `x-cron-secret` — query param
- * rentan bocor ke access log/referrer, dan nilai secret tidak pernah
- * ditulis ke log.
+ * Mendukung header standar Vercel Cron (`Authorization: Bearer <CRON_SECRET>`)
+ * serta custom header `x-cron-secret`.
  */
 export const triggerDailyUpload = async (req, res) => {
     try {
-        const secret = req.headers['x-cron-secret'];
+        const authHeader = req.headers['authorization'];
+        const bearerToken =
+            typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+                ? authHeader.slice(7).trim()
+                : null;
+        const customHeader =
+            typeof req.headers['x-cron-secret'] === 'string'
+                ? req.headers['x-cron-secret'].trim()
+                : null;
+        const secret = customHeader || bearerToken;
 
         if (!process.env.CRON_SECRET) {
             logger.warn('[Bot] Warning: CRON_SECRET is not set in environment variables.');
@@ -155,7 +164,7 @@ export const triggerDailyUpload = async (req, res) => {
         }
 
         if (!secret || secret !== process.env.CRON_SECRET) {
-            logger.warn('[Bot] Unauthorized trigger attempt (invalid or missing x-cron-secret header).');
+            logger.warn('[Bot] Unauthorized trigger attempt (invalid or missing cron secret).');
             return res.status(401).json({
                 message: 'Unauthorized: Invalid cron secret key.',
             });
