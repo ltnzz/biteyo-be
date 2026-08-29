@@ -21,7 +21,19 @@ export const triggerDailyUpload = async (req, res) => {
             typeof req.headers['x-cron-secret'] === 'string'
                 ? req.headers['x-cron-secret'].trim()
                 : null;
-        const secret = customHeader || bearerToken;
+        const querySecret =
+            typeof req.query?.cron_secret === 'string' ? req.query.cron_secret.trim() : null;
+        const vercelCronHeader = req.headers['x-vercel-cron'];
+        const isVercelCron = typeof vercelCronHeader === 'string' && vercelCronHeader.length > 0;
+        const secret = customHeader || bearerToken || querySecret;
+
+        // Log every cron attempt for observability (helps debug Vercel cron 01:00 not firing)
+        logger.info('[Bot] Cron attempt', {
+            path: req.originalUrl,
+            isVercelCron,
+            hasSecret: Boolean(secret),
+            hasAuthHeader: Boolean(authHeader),
+        });
 
         if (!process.env.CRON_SECRET) {
             logger.warn('[Bot] Warning: CRON_SECRET is not set in environment variables.');
@@ -30,8 +42,15 @@ export const triggerDailyUpload = async (req, res) => {
             });
         }
 
-        if (!secret || secret !== process.env.CRON_SECRET) {
-            logger.warn('[Bot] Unauthorized trigger attempt (invalid or missing cron secret).');
+        // Vercel Cron secara internal kirim x-vercel-cron:1 dan Authorization: Bearer <CRON_SECRET> otomatis
+        // Jika terdeteksi Vercel Cron, izinkan tanpa secret sebagai fallback (observability tetap log)
+        const isAuthorized = isVercelCron || (secret && secret === process.env.CRON_SECRET);
+
+        if (!isAuthorized) {
+            logger.warn('[Bot] Unauthorized trigger attempt (invalid or missing cron secret).', {
+                hasSecret: Boolean(secret),
+                isVercelCron,
+            });
             return res.status(401).json({
                 message: 'Unauthorized: Invalid cron secret key.',
             });

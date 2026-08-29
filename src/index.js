@@ -160,8 +160,8 @@ if (!process.env.JEST_WORKER_ID) {
         console.log(`Server running on http://localhost:${PORT}`);
 
         if (process.env.START_INTERNAL_CRON === 'true') {
-            // Schedule to run daily at 08:00 AM
-            scheduleDailyJob('Daily Upload Bot', executeDailyUpload, 8, 0);
+            // 01:00 UTC = 08:00 WIB — sinkron dengan vercel.json 0 1 * * *
+            scheduleDailyJob('Daily Upload Bot', executeDailyUpload, 1, 0);
         }
     });
 }

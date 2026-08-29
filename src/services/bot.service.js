@@ -6,7 +6,15 @@ import { users, bites, likes, comments, botDailyJobs } from '../db/schema.js';
 import { botBites, botComments } from '../utils/botData.js';
 import { logger } from '../utils/logger.js';
 
-export const getTodayJobDate = () => new Date().toISOString().slice(0, 10); // UTC
+export const getTodayJobDate = () => {
+    // WIB (Asia/Jakarta UTC+7) — cron jam 8 WIB harus pakai tanggal WIB, bukan UTC
+    const now = new Date();
+    const wib = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+    const y = wib.getFullYear();
+    const m = String(wib.getMonth() + 1).padStart(2, '0');
+    const d = String(wib.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
 
 export const ensureBotUser = async () => {
     let [botUser] = await db
