@@ -204,7 +204,7 @@ export const forgotPassword = async (req, res) => {
 
         await sendEmail(
             user.email,
-            'Reset Password BiteYo',
+            'Reset Password Biteyo',
             resetPasswordTemplate(resetLink)
         );
 

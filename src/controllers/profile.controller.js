@@ -255,7 +255,7 @@ export const getMentionSuggestions = async (req, res) => {
 export const updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
-        const { name, username, bio } = req.body;
+        const { name, username, bio, removeAvatar, removeBanner } = req.body;
         const avatarUrl =
             req.files?.avatar?.[0]?.path || req.files?.profileImage?.[0]?.path;
         const bannerUrl =
@@ -263,11 +263,14 @@ export const updateProfile = async (req, res) => {
             req.files?.bannerImage?.[0]?.path ||
             req.files?.cover?.[0]?.path;
 
+        const shouldRemoveAvatar = removeAvatar === true || removeAvatar === 'true' || removeAvatar === '1';
+        const shouldRemoveBanner = removeBanner === true || removeBanner === 'true' || removeBanner === '1';
+
         const trimmedNameForCheck = typeof name === 'string' ? name.trim() : '';
         const hasNameUpdate = typeof name === 'string' ? trimmedNameForCheck.length > 0 : false;
 
         // cek jika tidak ada field yang diupdate sama sekali
-        if (!hasNameUpdate && !username && bio === undefined && !avatarUrl && !bannerUrl) {
+        if (!hasNameUpdate && !username && bio === undefined && !avatarUrl && !bannerUrl && !shouldRemoveAvatar && !shouldRemoveBanner) {
             return res.status(400).json({
                 message: 'No fields to update',
             });
@@ -287,14 +290,30 @@ export const updateProfile = async (req, res) => {
             }
         }
 
+        // ambil old urls untuk cleanup setelah update
+        const [currentUserRow] = await db
+            .select({ avatarUrl: users.avatarUrl, bannerUrl: users.bannerUrl })
+            .from(users)
+            .where(eq(users.id, userId));
+        const oldAvatarUrl = currentUserRow?.avatarUrl;
+        const oldBannerUrl = currentUserRow?.bannerUrl;
+
         const updateData = { updatedAt: new Date() };
         if (hasNameUpdate) {
             updateData.name = trimmedNameForCheck;
         }
         if (username) updateData.username = username;
         if (bio !== undefined) updateData.bio = bio;
-        if (avatarUrl) updateData.avatarUrl = avatarUrl;
-        if (bannerUrl) updateData.bannerUrl = bannerUrl;
+        if (shouldRemoveAvatar) {
+            updateData.avatarUrl = null;
+        } else if (avatarUrl) {
+            updateData.avatarUrl = avatarUrl;
+        }
+        if (shouldRemoveBanner) {
+            updateData.bannerUrl = null;
+        } else if (bannerUrl) {
+            updateData.bannerUrl = bannerUrl;
+        }
 
         let updatedUser;
         try {
@@ -316,6 +335,20 @@ export const updateProfile = async (req, res) => {
                 }
             }
             throw dbError;
+        }
+
+        // cleanup old files setelah DB sukses (hapus orphan lama)
+        const toDelete = [];
+        if (shouldRemoveAvatar && oldAvatarUrl) toDelete.push(oldAvatarUrl);
+        else if (avatarUrl && oldAvatarUrl && oldAvatarUrl !== avatarUrl) toDelete.push(oldAvatarUrl);
+        if (shouldRemoveBanner && oldBannerUrl) toDelete.push(oldBannerUrl);
+        else if (bannerUrl && oldBannerUrl && oldBannerUrl !== bannerUrl) toDelete.push(oldBannerUrl);
+        for (const url of toDelete) {
+            try {
+                await deleteStorageObject(url);
+            } catch (e) {
+                logger.error('Cleanup old profile media failed:', { url, error: e?.message });
+            }
         }
 
         const { password, ...safeUser } = updatedUser;

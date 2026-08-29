@@ -26,7 +26,7 @@ export const sharePreview = async (req, res) => {
         const appUrl = process.env.CLIENT_URL || 'https://www.biteyo.my.id';
         const targetUrl = `${appUrl}/bites/${encodeURIComponent(req.params.id)}`;
 
-        let title = 'BiteYo — Social Food Discovery';
+        let title = 'Biteyo — Social Food Discovery';
         let description = 'Temukan rekomendasi makanan terbaik di sekitarmu.';
         let image = null;
 
@@ -46,7 +46,7 @@ export const sharePreview = async (req, res) => {
             title = `${row.foodName}${row.username ? ` oleh @${row.username}` : ''}`;
             description =
                 snippet(row.review) ||
-                `Lihat review ${row.foodName} di BiteYo.`;
+                `Lihat review ${row.foodName} di Biteyo.`;
             image = row.photoUrl || null;
         } else {
             logger.info('Share preview: bite not found', {
@@ -76,7 +76,7 @@ ${image ? `<meta property="og:image" content="${escapeHtml(image)}">` : ''}
 <link rel="canonical" href="${targetUrl}">
 </head>
 <body>
-<p>Mengalihkan ke BiteYo… <a href="${targetUrl}">Buka di sini</a></p>
+<p>Mengalihkan ke Biteyo… <a href="${targetUrl}">Buka di sini</a></p>
 <script>window.location.replace(${JSON.stringify(targetUrl)});</script>
 </body>
 </html>`);

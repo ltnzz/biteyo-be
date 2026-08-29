@@ -25,7 +25,7 @@ export const sendNotificationPush = async ({
     try {
         await sendPushToUser({
             userId: toUserId,
-            title: 'BiteYo',
+            title: 'Biteyo',
             body: message,
             data: {
                 type,

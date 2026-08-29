@@ -171,9 +171,11 @@ export const executeDailyUpload = async () => {
     } catch (err) {
         if (err.statusCode === 409) throw err;
         // If table does not exist yet (migration not applied), log and continue without idempotency
-        if (/relation.*bot_daily_jobs.*does not exist/i.test(err?.message || '')) {
+        const msg = err?.message || '';
+        const causeMsg = err?.cause?.message || '';
+        if (/relation.*bot_daily_jobs.*does not exist/i.test(msg) || /relation.*bot_daily_jobs.*does not exist/i.test(causeMsg)) {
             logger.warn('[Bot] bot_daily_jobs table missing, running without idempotency');
-        } else if (err?.code !== '23505') {
+        } else if (err?.code !== '23505' && err?.cause?.code !== '23505') {
             throw err;
         }
     }

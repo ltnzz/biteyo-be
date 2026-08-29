@@ -116,7 +116,7 @@ export const createMentionsFromText = async ({
 
     const message =
         sourceType === 'bite'
-            ? `${actorUsername || 'Someone'} mentioned you in a BiteYo post`
+            ? `${actorUsername || 'Someone'} mentioned you in a Biteyo post`
             : `${actorUsername || 'Someone'} mentioned you in a comment on ${biteFoodName || 'a post'}`;
 
     // Row notifikasi dibuat oleh DB trigger
@@ -125,7 +125,7 @@ export const createMentionsFromText = async ({
         newlyMentionedUsers.map((user) =>
             sendPushToUser({
                 userId: user.id,
-                title: 'BiteYo',
+                title: 'Biteyo',
                 body: message,
                 data: {
                     type: 'mention',

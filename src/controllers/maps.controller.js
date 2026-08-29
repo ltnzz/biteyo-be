@@ -53,7 +53,7 @@ export const searchLocation = async (req, res) => {
         const response = await fetch(url, {
             // Nominatim mensyaratkan UA yang mengidentifikasi aplikasi
             headers: {
-                'User-Agent': 'BiteYo/1.0 (+https://biteyo-fe.vercel.app)',
+                'User-Agent': 'Biteyo/1.0 (+https://biteyo-fe.vercel.app)',
             },
             signal: AbortSignal.timeout(5000),
         });

@@ -19,6 +19,8 @@ import {
 import {
     addComment,
     listComments,
+    editComment,
+    deleteComment,
 } from '../services/comment.service.js';
 import { AppError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
@@ -263,16 +265,10 @@ export const toggleSaveBite = async (req, res) =>
 
 export const createComment = async (req, res) =>
     handle(res, async () => {
-        const { content } = req.body;
-
-        if (!content || typeof content !== 'string' || !content.trim()) {
-            throw new AppError('Comment is required', 400);
-        }
-
         const result = await addComment({
             userId: req.user.id,
             biteId: req.params.id,
-            content,
+            content: req.body.content,
         });
 
         return {
@@ -283,10 +279,43 @@ export const createComment = async (req, res) =>
 
 export const getBiteComments = async (req, res) =>
     handle(res, async () => {
-        const result = await listComments(req.params.id);
+        const result = await listComments(req.params.id, {
+            page: parseInt(req.query.page) || 1,
+            limit: parseInt(req.query.limit) || 20,
+            sort: req.query.sort || 'desc',
+        });
 
         return {
             status: 200,
             body: { message: 'success', ...result },
+        };
+    });
+
+export const updateComment = async (req, res) =>
+    handle(res, async () => {
+        const result = await editComment({
+            userId: req.user.id,
+            biteId: req.params.id,
+            commentId: req.params.commentId,
+            content: req.body.content,
+        });
+
+        return {
+            status: 200,
+            body: { message: 'Comment updated', ...result },
+        };
+    });
+
+export const removeComment = async (req, res) =>
+    handle(res, async () => {
+        const result = await deleteComment({
+            userId: req.user.id,
+            biteId: req.params.id,
+            commentId: req.params.commentId,
+        });
+
+        return {
+            status: 200,
+            body: { message: 'Comment deleted', ...result },
         };
     });

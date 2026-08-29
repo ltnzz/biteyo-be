@@ -34,7 +34,7 @@ export const resetPasswordTemplate = (resetLink) => {
     <div style="max-width:600px; margin:20px auto 0 auto; text-align:center; color:#999; font-size:11px;">
 
       <p style="margin-bottom:5px;">
-        (c) ${new Date().getFullYear()} BiteYo App. All rights reserved.
+        (c) ${new Date().getFullYear()} Biteyo App. All rights reserved.
       </p>
 
       <p style="margin-bottom:5px;">

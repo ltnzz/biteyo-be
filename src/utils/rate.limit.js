@@ -17,3 +17,13 @@ export const authLimiter = rateLimit({
         message: 'Too many auth attempts. Please try again later.',
     },
 });
+
+export const commentLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 15,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        message: 'Terlalu banyak komentar. Coba lagi nanti.',
+    },
+});

@@ -150,6 +150,7 @@ export const comments = pgTable(
             }),
         content: text('content').notNull(),
         createdAt: timestamp('created_at').defaultNow().notNull(),
+        updatedAt: timestamp('updated_at').defaultNow().notNull(),
     },
     (table) => [
         index('comments_bite_created_at_idx').on(

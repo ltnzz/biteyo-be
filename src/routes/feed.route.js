@@ -13,6 +13,8 @@ import {
     toggleSaveBite,
     createComment,
     getBiteComments,
+    updateComment,
+    removeComment,
     recordBiteView,
 } from '../controllers/feed.controller.js';
 import { protect } from '../middlewares/auth.middleware.js';
@@ -23,6 +25,7 @@ import {
     updateBiteSchema,
 } from '../middlewares/validations/feed.validation.js';
 import { createCommentSchema } from '../middlewares/validations/comment.validation.js';
+import { commentLimiter } from '../utils/rate.limit.js';
 import { sharePreview } from '../controllers/share.controller.js';
 import { getTrendingKeywords } from '../controllers/feed.controller.js';
 
@@ -62,8 +65,21 @@ router.get(['/bites/:id/comments', '/status/:id/comments'], protect, getBiteComm
 router.post(
     ['/bites/:id/comments', '/status/:id/comments'],
     protect,
+    commentLimiter,
     validate(createCommentSchema),
     createComment
+);
+router.patch(
+    ['/bites/:id/comments/:commentId', '/status/:id/comments/:commentId'],
+    protect,
+    commentLimiter,
+    validate(createCommentSchema),
+    updateComment
+);
+router.delete(
+    ['/bites/:id/comments/:commentId', '/status/:id/comments/:commentId'],
+    protect,
+    removeComment
 );
 
 export default router;
